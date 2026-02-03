@@ -1,7 +1,6 @@
 //! Command execution within sandbox.
 
 use crate::error::SandboxError;
-use crate::limits::ResourceLimits;
 use crate::profile::SandboxProfile;
 use crate::Result;
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, warn};

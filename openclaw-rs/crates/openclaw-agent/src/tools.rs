@@ -7,7 +7,6 @@ use openclaw_core::types::{
     ExecutionResult, ToolDefinition, ToolExecutionConfig, ToolGroup, ToolResult,
 };
 use openclaw_sandbox::{CommandExecutor, ExecutionContext, SandboxProfile};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;

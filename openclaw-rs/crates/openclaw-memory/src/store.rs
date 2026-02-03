@@ -1,7 +1,6 @@
 //! Vector storage implementations.
 
 use crate::embeddings::cosine_similarity;
-use crate::error::MemoryError;
 use crate::{MemoryEntry, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;

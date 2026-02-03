@@ -64,7 +64,7 @@ pub async fn run(args: AgentArgs) -> anyhow::Result<()> {
             // Show agent details
         }
 
-        AgentCommand::Create { id, model, system } => {
+        AgentCommand::Create { id, model, system: _ } => {
             println!("Creating agent: {}", id);
             if let Some(m) = model {
                 println!("  Model: {}", m);

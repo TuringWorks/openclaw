@@ -26,7 +26,7 @@ pub struct DeliveryQueue {
     config: DeliveryConfig,
 
     /// Shutdown signal sender.
-    shutdown_tx: Option<mpsc::Sender<()>>,
+    _shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
 /// Configuration for the delivery queue.
@@ -165,7 +165,7 @@ impl DeliveryQueue {
             channels: Arc::new(RwLock::new(HashMap::new())),
             status: Arc::new(RwLock::new(HashMap::new())),
             config,
-            shutdown_tx: None,
+            _shutdown_tx: None,
         }
     }
 

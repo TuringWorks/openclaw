@@ -40,7 +40,7 @@ pub enum GatewayCommand {
 /// Run the gateway command.
 pub async fn run(args: GatewayArgs) -> anyhow::Result<()> {
     match args.command {
-        GatewayCommand::Run { bind, port, force } => {
+        GatewayCommand::Run { bind, port, force: _ } => {
             let bind_mode = match bind.as_str() {
                 "loopback" => BindMode::Loopback,
                 "lan" => BindMode::Lan,

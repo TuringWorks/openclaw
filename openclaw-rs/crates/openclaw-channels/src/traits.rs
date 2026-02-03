@@ -1,11 +1,10 @@
 //! Core channel traits.
 
 use crate::attachment::Attachment;
-use crate::error::ChannelError;
 use crate::Result;
 use async_trait::async_trait;
 use openclaw_core::types::{
-    ChannelCapabilities, ChannelHealth, ChatType, InboundMessage, MessageTarget, OutboundMessage,
+    ChannelCapabilities, ChannelHealth, InboundMessage, MessageTarget, OutboundMessage,
 };
 use std::fmt::Debug;
 
@@ -19,7 +18,7 @@ pub trait Channel: ChannelSender + ChannelReceiver + ChannelLifecycle + Send + S
     fn instance_id(&self) -> &str;
 
     /// Get channel capabilities.
-    fn capabilities(&self) -> &ChannelCapabilities;
+    fn capabilities(&self) -> ChannelCapabilities;
 
     /// Check if the channel supports a specific feature.
     fn supports(&self, feature: ChannelFeature) -> bool {

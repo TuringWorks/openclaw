@@ -14,7 +14,7 @@ use crate::profile::{FilesystemRules, NetworkRules};
 use crate::Result;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// macOS sandbox profile generator.
 pub struct MacOsSandbox {

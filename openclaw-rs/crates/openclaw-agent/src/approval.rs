@@ -6,7 +6,6 @@ use chrono::{DateTime, Duration, Utc};
 use openclaw_core::types::ApprovalId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, warn};
 
@@ -214,7 +213,7 @@ impl ApprovalManager {
                 .unwrap_or(std::time::Duration::from_secs(1));
 
             match tokio::time::timeout(wait_time, rx.recv()).await {
-                Ok(Ok(ApprovalEvent::Responded { id: event_id, approved })) => {
+                Ok(Ok(ApprovalEvent::Responded { id: event_id, approved: _ })) => {
                     if &event_id == id {
                         if let Some(request) = self.get(id).await {
                             if let Some(response) = request.response {

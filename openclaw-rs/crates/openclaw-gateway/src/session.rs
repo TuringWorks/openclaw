@@ -1,7 +1,6 @@
 //! Gateway session management.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Gateway session for a WebSocket connection.

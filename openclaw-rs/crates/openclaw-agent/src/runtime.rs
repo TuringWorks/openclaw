@@ -1,7 +1,6 @@
 //! Agent runtime for executing conversations.
 
 use crate::approval::ApprovalManager;
-use crate::error::AgentError;
 use crate::providers::{ModelProvider, StreamEvent};
 use crate::session::{Session, SessionManager};
 use crate::tools::{ToolContext, ToolExecutor, ToolRegistry};
@@ -9,8 +8,7 @@ use crate::Result;
 use async_stream::stream;
 use futures::Stream;
 use openclaw_core::types::{
-    AgentConfig, AgentId, ContentBlock, Message, MessageContent, Role, SessionKey, ThinkingLevel,
-    TokenUsage,
+    AgentConfig, AgentId, Message, SessionKey, ThinkingLevel, TokenUsage,
 };
 use std::pin::Pin;
 use std::sync::Arc;

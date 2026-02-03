@@ -187,7 +187,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<GatewayState>) {
     info!("Client connected: {}", client_id);
 
     let (mut sender, mut receiver) = socket.split();
-    let mut broadcast_rx = state.broadcast_tx.subscribe();
+    let _broadcast_rx = state.broadcast_tx.subscribe();
 
     // Handle incoming messages
     let state_clone = state.clone();
