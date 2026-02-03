@@ -5,21 +5,21 @@
 use crate::attachment::{Attachment, AttachmentType};
 use crate::error::ChannelError;
 use crate::traits::{
-    Channel, ChannelConfig, ChannelFeature, ChannelLifecycle, ChannelReceiver, ChannelSender,
-    MessageHandler, SendResult,
+    Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
+    SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
 use openclaw_core::types::{
-    ChannelCapabilities, ChannelHealth, ChatType, InboundMessage, MediaAttachment, MessageSender,
-    MessageTarget, OutboundMessage, SenderType,
+    ChannelCapabilities, ChannelFeatures, ChannelHealth, ChannelLimits, ChatInfo, ChatType,
+    HealthStatus, InboundMessage, MediaAttachment, MediaCapabilities, MediaType, MessageId,
+    MessageTarget, OutboundMessage, ParseMode as CoreParseMode, QuotedMessage, SenderInfo,
 };
-use std::collections::HashMap;
 use std::sync::Arc;
 use teloxide::prelude::*;
-use teloxide::types::{ChatId, InputFile, MediaKind, MessageKind, ParseMode, UpdateKind};
+use teloxide::types::{ChatId, InputFile, MediaKind, MessageKind, ParseMode};
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 /// Telegram channel implementation.
 pub struct TelegramChannel {
@@ -79,14 +79,9 @@ impl TelegramChannel {
 
     /// Convert Telegram message to InboundMessage.
     async fn convert_message(&self, msg: &teloxide::types::Message) -> Option<InboundMessage> {
-        let from = msg.from.as_ref()?;
+        let from = msg.from()?;
 
-        let sender = MessageSender {
-            sender_type: if from.is_bot {
-                SenderType::Bot
-            } else {
-                SenderType::User
-            },
+        let sender = SenderInfo {
             id: from.id.to_string(),
             username: from.username.clone(),
             display_name: Some(
@@ -95,11 +90,12 @@ impl TelegramChannel {
                     .map(|ln| format!("{} {}", from.first_name, ln))
                     .unwrap_or_else(|| from.first_name.clone()),
             ),
-            phone: None,
+            phone_number: None,
+            is_bot: from.is_bot,
         };
 
         let chat_type = match &msg.chat.kind {
-            teloxide::types::ChatKind::Private(_) => ChatType::Private,
+            teloxide::types::ChatKind::Private(_) => ChatType::Direct,
             teloxide::types::ChatKind::Public(public) => match &public.kind {
                 teloxide::types::PublicChatKind::Group(_) => ChatType::Group,
                 teloxide::types::PublicChatKind::Supergroup(_) => ChatType::Group,
@@ -107,23 +103,34 @@ impl TelegramChannel {
             },
         };
 
-        let text = msg.text().unwrap_or_default().to_string();
+        let chat = ChatInfo {
+            id: msg.chat.id.to_string(),
+            chat_type,
+            title: msg.chat.title().map(|t| t.to_string()),
+            guild_id: None,
+        };
 
-        let attachments = self.extract_attachments(msg).await;
+        let text = msg.text().unwrap_or_default().to_string();
+        let media = self.extract_attachments(msg).await;
+
+        let quote = msg.reply_to_message().map(|reply| QuotedMessage {
+            id: reply.id.to_string(),
+            text: reply.text().map(|t| t.to_string()),
+            sender_id: reply.from().map(|f| f.id.to_string()),
+        });
 
         Some(InboundMessage {
-            channel: "telegram".to_string(),
-            account: self.instance_id.clone(),
-            sender,
-            chat_type,
-            chat_id: msg.chat.id.to_string(),
-            guild: None,
-            message_id: msg.id.to_string(),
-            reply_to: msg.reply_to_message.as_ref().map(|m| m.id.to_string()),
-            text,
-            attachments,
+            id: MessageId::new(msg.id.to_string()),
             timestamp: chrono::Utc::now(),
-            raw: Some(serde_json::to_value(msg).ok()?),
+            channel: "telegram".to_string(),
+            account_id: self.instance_id.clone(),
+            sender,
+            chat,
+            text,
+            media,
+            quote,
+            thread: None,
+            metadata: serde_json::to_value(msg).unwrap_or_default(),
         })
     }
 
@@ -136,73 +143,69 @@ impl TelegramChannel {
                 MediaKind::Photo(photo) => {
                     if let Some(largest) = photo.photo.last() {
                         attachments.push(MediaAttachment {
-                            media_type: "image".to_string(),
+                            id: largest.file.id.clone(),
+                            media_type: MediaType::Image,
                             url: None,
-                            file_id: Some(largest.file.id.clone()),
+                            data: None,
                             filename: None,
-                            size: largest.file.size.map(|s| s as u64),
-                            caption: photo.caption.clone(),
+                            size_bytes: Some(largest.file.size as u64),
+                            mime_type: Some("image/jpeg".to_string()),
                         });
                     }
                 }
                 MediaKind::Document(doc) => {
                     attachments.push(MediaAttachment {
-                        media_type: doc
-                            .document
-                            .mime_type
-                            .as_ref()
-                            .map(|m| m.to_string())
-                            .unwrap_or_else(|| "application/octet-stream".to_string()),
+                        id: doc.document.file.id.clone(),
+                        media_type: MediaType::Document,
                         url: None,
-                        file_id: Some(doc.document.file.id.clone()),
+                        data: None,
                         filename: doc.document.file_name.clone(),
-                        size: doc.document.file.size.map(|s| s as u64),
-                        caption: doc.caption.clone(),
+                        size_bytes: Some(doc.document.file.size as u64),
+                        mime_type: doc.document.mime_type.as_ref().map(|m| m.to_string()),
                     });
                 }
                 MediaKind::Audio(audio) => {
                     attachments.push(MediaAttachment {
-                        media_type: audio
-                            .audio
-                            .mime_type
-                            .as_ref()
-                            .map(|m| m.to_string())
-                            .unwrap_or_else(|| "audio/mpeg".to_string()),
+                        id: audio.audio.file.id.clone(),
+                        media_type: MediaType::Audio,
                         url: None,
-                        file_id: Some(audio.audio.file.id.clone()),
+                        data: None,
                         filename: audio.audio.file_name.clone(),
-                        size: audio.audio.file.size.map(|s| s as u64),
-                        caption: audio.caption.clone(),
+                        size_bytes: Some(audio.audio.file.size as u64),
+                        mime_type: audio.audio.mime_type.as_ref().map(|m| m.to_string()),
                     });
                 }
                 MediaKind::Voice(voice) => {
                     attachments.push(MediaAttachment {
-                        media_type: voice
-                            .voice
-                            .mime_type
-                            .as_ref()
-                            .map(|m| m.to_string())
-                            .unwrap_or_else(|| "audio/ogg".to_string()),
+                        id: voice.voice.file.id.clone(),
+                        media_type: MediaType::Voice,
                         url: None,
-                        file_id: Some(voice.voice.file.id.clone()),
+                        data: None,
                         filename: None,
-                        size: voice.voice.file.size.map(|s| s as u64),
-                        caption: None,
+                        size_bytes: Some(voice.voice.file.size as u64),
+                        mime_type: voice.voice.mime_type.as_ref().map(|m| m.to_string()),
                     });
                 }
                 MediaKind::Video(video) => {
                     attachments.push(MediaAttachment {
-                        media_type: video
-                            .video
-                            .mime_type
-                            .as_ref()
-                            .map(|m| m.to_string())
-                            .unwrap_or_else(|| "video/mp4".to_string()),
+                        id: video.video.file.id.clone(),
+                        media_type: MediaType::Video,
                         url: None,
-                        file_id: Some(video.video.file.id.clone()),
+                        data: None,
                         filename: video.video.file_name.clone(),
-                        size: video.video.file.size.map(|s| s as u64),
-                        caption: video.caption.clone(),
+                        size_bytes: Some(video.video.file.size as u64),
+                        mime_type: video.video.mime_type.as_ref().map(|m| m.to_string()),
+                    });
+                }
+                MediaKind::Sticker(sticker) => {
+                    attachments.push(MediaAttachment {
+                        id: sticker.sticker.file.id.clone(),
+                        media_type: MediaType::Sticker,
+                        url: None,
+                        data: None,
+                        filename: None,
+                        size_bytes: Some(sticker.sticker.file.size as u64),
+                        mime_type: Some("image/webp".to_string()),
                     });
                 }
                 _ => {}
@@ -223,21 +226,36 @@ impl Channel for TelegramChannel {
         &self.instance_id
     }
 
-    fn capabilities(&self) -> &ChannelCapabilities {
-        static CAPS: ChannelCapabilities = ChannelCapabilities {
-            markdown: true,
-            html: true,
-            images: true,
-            audio: true,
-            video: true,
-            files: true,
-            reactions: true,
-            threads: true,
-            edits: true,
-            deletes: true,
-            buttons: true,
-        };
-        &CAPS
+    fn capabilities(&self) -> ChannelCapabilities {
+        ChannelCapabilities {
+            chat_types: vec![ChatType::Direct, ChatType::Group, ChatType::Channel],
+            media: MediaCapabilities {
+                images: true,
+                audio: true,
+                video: true,
+                files: true,
+                stickers: true,
+                voice_notes: true,
+                max_file_size_mb: 50,
+            },
+            features: ChannelFeatures {
+                reactions: true,
+                threads: true,
+                edits: true,
+                deletes: true,
+                typing_indicators: true,
+                read_receipts: false,
+                mentions: true,
+                polls: true,
+                native_commands: true,
+            },
+            limits: ChannelLimits {
+                text_max_length: 4096,
+                caption_max_length: 1024,
+                messages_per_second: 30.0,
+                messages_per_minute: 1800,
+            },
+        }
     }
 }
 
@@ -255,12 +273,12 @@ impl ChannelSender for TelegramChannel {
         let mut request = self.bot.send_message(chat_id, &message.text);
 
         // Set parse mode
-        if message.format.as_deref() == Some("html") {
-            request = request.parse_mode(ParseMode::Html);
-        } else if message.format.as_deref() == Some("markdown")
-            || message.format.as_deref() == Some("markdown_v2")
-        {
-            request = request.parse_mode(ParseMode::MarkdownV2);
+        if let Some(ref parse_mode) = message.options.parse_mode {
+            match parse_mode {
+                CoreParseMode::Html => request = request.parse_mode(ParseMode::Html),
+                CoreParseMode::Markdown => request = request.parse_mode(ParseMode::MarkdownV2),
+                CoreParseMode::Plain => {} // No parse mode for plain text
+            }
         }
 
         // Set reply
@@ -415,11 +433,7 @@ impl ChannelReceiver for TelegramChannel {
                 },
             );
 
-            Dispatcher::builder(bot, handler)
-                .enable_ctrlc_handler()
-                .build()
-                .dispatch()
-                .await;
+            Dispatcher::builder(bot, handler).build().dispatch().await;
         });
 
         info!("Started receiving messages for Telegram bot: {}", self.instance_id);
@@ -501,15 +515,15 @@ impl ChannelLifecycle for TelegramChannel {
 
         match self.bot.get_me().await {
             Ok(_) => Ok(ChannelHealth {
-                connected: true,
+                status: HealthStatus::Healthy,
                 latency_ms: Some(start.elapsed().as_millis() as u64),
-                last_message: None,
+                last_message_at: None,
                 error: None,
             }),
             Err(e) => Ok(ChannelHealth {
-                connected: false,
+                status: HealthStatus::Unhealthy,
                 latency_ms: None,
-                last_message: None,
+                last_message_at: None,
                 error: Some(e.to_string()),
             }),
         }
@@ -547,8 +561,11 @@ mod tests {
     fn test_capabilities() {
         let channel = TelegramChannel::new("test_token", "test_bot");
         let caps = channel.capabilities();
-        assert!(caps.markdown);
-        assert!(caps.images);
-        assert!(caps.edits);
+        assert!(caps.media.images);
+        assert!(caps.features.edits);
+        assert!(caps.features.reactions);
+        assert_eq!(caps.limits.text_max_length, 4096);
+        assert!(caps.chat_types.contains(&ChatType::Direct));
+        assert!(caps.chat_types.contains(&ChatType::Group));
     }
 }

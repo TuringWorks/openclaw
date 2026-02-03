@@ -184,6 +184,9 @@ pub struct ThreadInfo {
 /// An outbound message to be sent to a channel.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OutboundMessage {
+    /// Target for the message (chat/thread).
+    pub target: super::MessageTarget,
+
     /// Text content.
     pub text: String,
 

@@ -215,7 +215,7 @@ pub enum HealthStatus {
 }
 
 /// Target for message delivery.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MessageTarget {
     /// Chat/conversation ID.
     pub chat_id: String,
