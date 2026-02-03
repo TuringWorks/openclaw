@@ -41,6 +41,7 @@ OpenClaw is a multi-channel AI agent gateway that connects large language models
 ## Recommended Rust Crates
 
 ### Core Infrastructure
+
 - `tokio` - Async runtime
 - `axum` / `warp` - HTTP/WebSocket server
 - `tokio-tungstenite` - WebSocket client
@@ -49,6 +50,7 @@ OpenClaw is a multi-channel AI agent gateway that connects large language models
 - `tracing` - Structured logging
 
 ### Security
+
 - `seccompiler` - Syscall filtering
 - `landlock` - Filesystem sandboxing (Linux 5.13+)
 - `zeroize` - Secure memory wiping
@@ -56,12 +58,14 @@ OpenClaw is a multi-channel AI agent gateway that connects large language models
 - `argon2` - Password hashing
 
 ### Agent/Tool System
+
 - `jsonschema` - JSON Schema validation
 - `pty` / `portable-pty` - PTY handling
 - `nix` - Unix process control
 - `caps` - Linux capabilities
 
 ### Messaging Channels
+
 - `teloxide` - Telegram Bot API
 - `serenity` - Discord
 - `slack-morphism` - Slack
@@ -69,7 +73,7 @@ OpenClaw is a multi-channel AI agent gateway that connects large language models
 
 ## Directory Structure (Target)
 
-```
+```text
 openclaw-rs/
 ├── Cargo.toml                 # Workspace manifest
 ├── crates/

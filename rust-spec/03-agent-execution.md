@@ -3,6 +3,7 @@
 ## 1. Agent Model Overview
 
 Agents are AI-powered conversational entities that:
+
 - Receive messages from messaging channels
 - Maintain conversation context via sessions
 - Call AI model APIs (Claude, OpenAI, etc.)
@@ -97,7 +98,7 @@ pub struct AgentIdentity {
 
 Agent workspaces contain instruction files:
 
-```
+```text
 workspace/
 ├── AGENTS.md      # Agent behavior instructions
 ├── SOUL.md        # Personality/tone instructions

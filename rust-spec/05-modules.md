@@ -4,7 +4,7 @@
 
 The Rust implementation uses a Cargo workspace with multiple crates for modularity and compile-time optimization.
 
-```
+```text
 openclaw-rs/
 ├── Cargo.toml                      # Workspace manifest
 ├── Cargo.lock
@@ -121,7 +121,7 @@ wiremock = "0.5"
 
 Shared types, configuration, and utilities used across all crates.
 
-```
+```text
 crates/openclaw-core/
 ├── Cargo.toml
 └── src/
@@ -189,7 +189,7 @@ pub use types::*;
 
 WebSocket server and HTTP endpoints.
 
-```
+```text
 crates/openclaw-gateway/
 ├── Cargo.toml
 └── src/
@@ -247,7 +247,7 @@ dashmap.workspace = true
 
 Agent runtime and tool execution.
 
-```
+```text
 crates/openclaw-agent/
 ├── Cargo.toml
 └── src/
@@ -310,7 +310,7 @@ pub use models::{ModelRegistry, ModelProvider, ModelRef};
 
 Process isolation with seccomp and landlock.
 
-```
+```text
 crates/openclaw-sandbox/
 ├── Cargo.toml
 └── src/
@@ -367,7 +367,7 @@ pub fn check_features() -> SandboxFeatures {
 
 Channel abstraction layer.
 
-```
+```text
 crates/openclaw-channels/
 ├── Cargo.toml
 └── src/
@@ -396,7 +396,7 @@ crates/openclaw-channels/
 
 Vector search and embeddings.
 
-```
+```text
 crates/openclaw-memory/
 ├── Cargo.toml
 └── src/
@@ -419,7 +419,7 @@ crates/openclaw-memory/
 
 Command-line interface.
 
-```
+```text
 crates/openclaw-cli/
 ├── Cargo.toml
 └── src/
@@ -508,7 +508,7 @@ enum Commands {
 
 Plugin development kit.
 
-```
+```text
 crates/openclaw-plugin-sdk/
 ├── Cargo.toml
 └── src/
@@ -551,7 +551,7 @@ macro_rules! declare_plugin {
 
 Each channel is a separate crate.
 
-```
+```text
 channels/openclaw-telegram/
 ├── Cargo.toml
 └── src/
@@ -656,7 +656,7 @@ components = ["rustfmt", "clippy"]
 
 ## 14. Testing Organization
 
-```
+```text
 tests/
 ├── integration/
 │   ├── gateway_test.rs
