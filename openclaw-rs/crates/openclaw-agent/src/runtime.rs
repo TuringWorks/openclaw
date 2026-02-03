@@ -4,18 +4,17 @@ use crate::approval::ApprovalManager;
 use crate::error::AgentError;
 use crate::providers::{ModelProvider, StreamEvent};
 use crate::session::{Session, SessionManager};
-use crate::tools::{Tool, ToolContext, ToolExecutor, ToolRegistry};
+use crate::tools::{ToolContext, ToolExecutor, ToolRegistry};
 use crate::Result;
 use async_stream::stream;
 use futures::Stream;
 use openclaw_core::types::{
-    AgentConfig, AgentId, ContentBlock, Message, Role, SessionKey, ThinkingLevel,
-    TokenUsage, ToolDefinition,
+    AgentConfig, AgentId, ContentBlock, Message, MessageContent, Role, SessionKey, ThinkingLevel,
+    TokenUsage,
 };
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::debug;
 
 /// Configuration for the agent runtime.
 #[derive(Debug, Clone)]
@@ -50,17 +49,14 @@ impl Default for RuntimeConfig {
             temperature: 0.7,
             thinking_level: ThinkingLevel::default(),
             system_prompt: None,
-            stop_sequences: vec![],
+            stop_sequences: Vec::new(),
             enable_tools: true,
         }
     }
 }
 
-/// The agent runtime executes conversations with model providers.
+/// The agent runtime manages conversation execution.
 pub struct AgentRuntime {
-    /// Agent ID.
-    agent_id: AgentId,
-
     /// Agent configuration.
     config: AgentConfig,
 
@@ -70,39 +66,38 @@ pub struct AgentRuntime {
     /// Model provider.
     provider: Arc<dyn ModelProvider>,
 
-    /// Session manager.
-    sessions: Arc<SessionManager>,
-
     /// Tool registry.
-    tools: Arc<ToolRegistry>,
+    tool_registry: Arc<ToolRegistry>,
 
     /// Tool executor.
-    executor: Arc<ToolExecutor>,
+    tool_executor: Arc<ToolExecutor>,
 
     /// Approval manager.
-    approvals: Arc<ApprovalManager>,
+    approval_manager: Arc<ApprovalManager>,
+
+    /// Session manager.
+    session_manager: Arc<SessionManager>,
 }
 
 impl AgentRuntime {
     /// Create a new agent runtime.
     pub fn new(
-        agent_id: AgentId,
         config: AgentConfig,
         provider: Arc<dyn ModelProvider>,
-        sessions: Arc<SessionManager>,
+        tool_registry: Arc<ToolRegistry>,
+        session_manager: Arc<SessionManager>,
     ) -> Self {
-        let tools = Arc::new(ToolRegistry::new());
-        let executor = Arc::new(ToolExecutor::new(tools.clone()));
+        let tool_executor = Arc::new(ToolExecutor::new(tool_registry.clone()));
+        let approval_manager = Arc::new(ApprovalManager::new());
 
         Self {
-            agent_id,
             config,
             runtime_config: RuntimeConfig::default(),
             provider,
-            sessions,
-            tools,
-            executor,
-            approvals: Arc::new(ApprovalManager::new()),
+            tool_registry,
+            tool_executor,
+            approval_manager,
+            session_manager,
         }
     }
 
@@ -112,147 +107,59 @@ impl AgentRuntime {
         self
     }
 
-    /// Set the tool registry.
-    pub fn with_tools(mut self, tools: Arc<ToolRegistry>) -> Self {
-        self.tools = tools.clone();
-        self.executor = Arc::new(ToolExecutor::new(tools));
-        self
-    }
-
     /// Set the approval manager.
-    pub fn with_approvals(mut self, approvals: Arc<ApprovalManager>) -> Self {
-        self.approvals = approvals;
+    pub fn with_approval_manager(mut self, manager: Arc<ApprovalManager>) -> Self {
+        self.approval_manager = manager;
         self
     }
 
     /// Get the agent ID.
     pub fn agent_id(&self) -> &AgentId {
-        &self.agent_id
+        &self.config.id
     }
 
-    /// Get the tool registry.
-    pub fn tools(&self) -> &Arc<ToolRegistry> {
-        &self.tools
+    /// Get the tool definitions.
+    pub async fn tool_definitions(&self) -> Vec<openclaw_core::types::ToolDefinition> {
+        self.tool_registry.definitions().await
     }
 
-    /// Get the approval manager.
-    pub fn approvals(&self) -> &Arc<ApprovalManager> {
-        &self.approvals
-    }
+    /// Process a user message and return a response.
+    pub async fn process_message(
+        &self,
+        session_key: &SessionKey,
+        message: &str,
+    ) -> Result<String> {
+        let mut session = self
+            .session_manager
+            .get_or_create(session_key, &self.config.id)
+            .await?;
 
-    /// Process a message and return the response.
-    pub async fn process(&self, session_key: &SessionKey, message: &str) -> Result<String> {
-        let session = self.sessions.get_or_create(session_key.clone()).await?;
+        session.add_user_message(message);
 
-        // Add user message
-        {
-            let mut s = session.write().await;
-            s.add_user_message(message);
-        }
+        // Get response from model
+        let response = self.get_model_response(&session).await?;
 
-        // Run the agentic loop
-        let mut turns = 0;
-        let mut final_response = String::new();
+        // Add assistant response
+        session.add_assistant_message(&response);
 
-        while turns < self.runtime_config.max_turns {
-            turns += 1;
-            debug!("Agent turn {}/{}", turns, self.runtime_config.max_turns);
+        // Save session
+        self.session_manager.save(&session).await?;
 
-            // Get current messages
-            let messages = {
-                let s = session.read().await;
-                s.messages.clone()
-            };
-
-            // Get tool definitions
-            let tools = if self.runtime_config.enable_tools {
-                self.tools.definitions().await
-            } else {
-                vec![]
-            };
-
-            // Call the model
-            let response = self
-                .provider
-                .generate(
-                    &self.config.model.as_deref().unwrap_or("claude-sonnet-4-20250514"),
-                    &messages,
-                    &self.runtime_config.system_prompt,
-                    &tools,
-                    self.runtime_config.max_output_tokens,
-                    self.runtime_config.temperature,
-                )
-                .await?;
-
-            // Update token usage
-            {
-                let mut s = session.write().await;
-                s.update_tokens(response.usage);
-            }
-
-            // Process response content
-            let mut has_tool_use = false;
-            let mut assistant_content = Vec::new();
-            let mut text_response = String::new();
-
-            for block in &response.content {
-                match block {
-                    ContentBlock::Text { text } => {
-                        text_response.push_str(text);
-                        assistant_content.push(block.clone());
-                    }
-                    ContentBlock::ToolUse { id, name, input } => {
-                        has_tool_use = true;
-                        assistant_content.push(block.clone());
-
-                        // Execute the tool
-                        let result = self.execute_tool(session_key, name, input.clone()).await;
-
-                        // Add tool result
-                        assistant_content.push(ContentBlock::ToolResult {
-                            tool_use_id: id.clone(),
-                            content: match &result {
-                                Ok(r) => r.output.as_ref()
-                                    .map(|v| v.to_string())
-                                    .unwrap_or_else(|| "Success".to_string()),
-                                Err(e) => format!("Error: {}", e),
-                            },
-                            is_error: result.is_err() || result.as_ref().map(|r| !r.success).unwrap_or(false),
-                        });
-                    }
-                    _ => {
-                        assistant_content.push(block.clone());
-                    }
-                }
-            }
-
-            // Add assistant message
-            {
-                let mut s = session.write().await;
-                s.add_message(Role::Assistant, assistant_content);
-            }
-
-            // Check if we should continue
-            if !has_tool_use || response.stop_reason == Some("end_turn".to_string()) {
-                final_response = text_response;
-                break;
-            }
-        }
-
-        // Save the session
-        self.sessions.save(session_key).await?;
-
-        Ok(final_response)
+        Ok(response)
     }
 
     /// Process a message with streaming response.
-    pub fn process_stream(
+    pub fn process_message_stream(
         &self,
         session_key: SessionKey,
         message: String,
     ) -> Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send + '_>> {
         Box::pin(stream! {
-            let session = match self.sessions.get_or_create(session_key.clone()).await {
+            // Signal start
+            yield Ok(StreamEvent::Start);
+
+            // Get or create session
+            let mut session = match self.session_manager.get_or_create(&session_key, &self.config.id).await {
                 Ok(s) => s,
                 Err(e) => {
                     yield Err(e);
@@ -260,209 +167,135 @@ impl AgentRuntime {
                 }
             };
 
-            // Add user message
-            {
-                let mut s = session.write().await;
-                s.add_user_message(&message);
-            }
+            session.add_user_message(&message);
 
-            let mut turns = 0;
+            // Get response
+            match self.get_model_response(&session).await {
+                Ok(response) => {
+                    // Stream the response as text deltas
+                    yield Ok(StreamEvent::Text(response.clone()));
 
-            while turns < self.runtime_config.max_turns {
-                turns += 1;
+                    // Add to session
+                    session.add_assistant_message(&response);
 
-                // Get current messages
-                let messages = {
-                    let s = session.read().await;
-                    s.messages.clone()
-                };
-
-                // Get tool definitions
-                let tools = if self.runtime_config.enable_tools {
-                    self.tools.definitions().await
-                } else {
-                    vec![]
-                };
-
-                // Stream from the model
-                let mut stream = self.provider.generate_stream(
-                    self.config.model.as_deref().unwrap_or("claude-sonnet-4-20250514"),
-                    &messages,
-                    &self.runtime_config.system_prompt,
-                    &tools,
-                    self.runtime_config.max_output_tokens,
-                    self.runtime_config.temperature,
-                );
-
-                let mut has_tool_use = false;
-                let mut assistant_content = Vec::new();
-                let mut current_text = String::new();
-                let mut current_tool_use: Option<(String, String, serde_json::Value)> = None;
-
-                use futures::StreamExt;
-
-                while let Some(event) = stream.next().await {
-                    match event {
-                        Ok(StreamEvent::TextDelta { text }) => {
-                            current_text.push_str(&text);
-                            yield Ok(StreamEvent::TextDelta { text });
-                        }
-                        Ok(StreamEvent::ToolUseStart { id, name }) => {
-                            has_tool_use = true;
-                            current_tool_use = Some((id, name.clone(), serde_json::Value::Null));
-                            yield Ok(StreamEvent::ToolUseStart { id: id.clone(), name });
-                        }
-                        Ok(StreamEvent::ToolUseInput { input }) => {
-                            if let Some((_, _, ref mut args)) = current_tool_use {
-                                *args = input.clone();
-                            }
-                            yield Ok(StreamEvent::ToolUseInput { input });
-                        }
-                        Ok(StreamEvent::ToolUseEnd) => {
-                            if let Some((id, name, input)) = current_tool_use.take() {
-                                // Add text before tool use
-                                if !current_text.is_empty() {
-                                    assistant_content.push(ContentBlock::Text {
-                                        text: std::mem::take(&mut current_text),
-                                    });
-                                }
-
-                                assistant_content.push(ContentBlock::ToolUse {
-                                    id: id.clone(),
-                                    name: name.clone(),
-                                    input: input.clone(),
-                                });
-
-                                // Execute tool
-                                let result = self.execute_tool(&session_key, &name, input).await;
-
-                                let (content, is_error) = match &result {
-                                    Ok(r) => (
-                                        r.output.as_ref()
-                                            .map(|v| v.to_string())
-                                            .unwrap_or_else(|| "Success".to_string()),
-                                        !r.success,
-                                    ),
-                                    Err(e) => (format!("Error: {}", e), true),
-                                };
-
-                                assistant_content.push(ContentBlock::ToolResult {
-                                    tool_use_id: id.clone(),
-                                    content: content.clone(),
-                                    is_error,
-                                });
-
-                                yield Ok(StreamEvent::ToolResult {
-                                    tool_use_id: id,
-                                    content,
-                                    is_error,
-                                });
-                            }
-                            yield Ok(StreamEvent::ToolUseEnd);
-                        }
-                        Ok(StreamEvent::Usage(usage)) => {
-                            let mut s = session.write().await;
-                            s.update_tokens(usage.clone());
-                            yield Ok(StreamEvent::Usage(usage));
-                        }
-                        Ok(StreamEvent::Done) => {
-                            yield Ok(StreamEvent::Done);
-                            break;
-                        }
-                        Err(e) => {
-                            yield Err(e);
-                            return;
-                        }
-                        other => {
-                            yield other;
-                        }
+                    // Save session
+                    if let Err(e) = self.session_manager.save(&session).await {
+                        yield Err(e);
+                        return;
                     }
                 }
-
-                // Add remaining text
-                if !current_text.is_empty() {
-                    assistant_content.push(ContentBlock::Text { text: current_text });
-                }
-
-                // Add assistant message
-                if !assistant_content.is_empty() {
-                    let mut s = session.write().await;
-                    s.add_message(Role::Assistant, assistant_content);
-                }
-
-                if !has_tool_use {
-                    break;
+                Err(e) => {
+                    yield Err(e);
+                    return;
                 }
             }
 
-            // Save session
-            if let Err(e) = self.sessions.save(&session_key).await {
-                warn!("Failed to save session: {}", e);
-            }
+            // Signal completion
+            yield Ok(StreamEvent::Done);
         })
     }
 
-    /// Execute a tool.
-    async fn execute_tool(
-        &self,
-        session_key: &SessionKey,
-        name: &str,
-        args: serde_json::Value,
-    ) -> Result<openclaw_core::types::ToolResult> {
-        debug!("Executing tool '{}' with args: {:?}", name, args);
-
-        // Check if approval is required
-        if self.executor.requires_approval(name, &args).await? {
-            let request = self
-                .approvals
-                .request(
-                    session_key.session_id.clone(),
-                    name.to_string(),
-                    args.clone(),
-                    format!("Tool '{}' requires approval", name),
-                )
-                .await?;
-
-            // If not auto-approved, wait for response
-            if request.status == crate::approval::ApprovalStatus::Pending {
-                let response = self
-                    .approvals
-                    .wait_for_response(&request.id, None)
-                    .await?;
-
-                if !response.approved {
-                    return Err(AgentError::ApprovalDenied(name.to_string()));
-                }
-            } else if request.status == crate::approval::ApprovalStatus::Denied {
-                return Err(AgentError::ApprovalDenied(name.to_string()));
-            }
-        }
-
-        // Create tool context
-        let context = ToolContext {
-            session_id: session_key.session_id.clone(),
-            agent_id: session_key.agent_id.to_string(),
-            ..Default::default()
+    /// Get a response from the model.
+    async fn get_model_response(&self, session: &Session) -> Result<String> {
+        let messages: Vec<Message> = session.messages.clone();
+        let tools = if self.runtime_config.enable_tools {
+            self.tool_registry.definitions().await
+        } else {
+            Vec::new()
         };
 
-        // Execute the tool
-        self.executor.execute(name, args, Some(&context)).await
+        let response = self.provider.complete(&messages, &tools).await?;
+
+        // Extract text from response
+        Ok(response.content.to_text())
     }
+
+    /// Execute a tool use.
+    pub async fn execute_tool(
+        &self,
+        tool_use_id: &str,
+        tool_name: &str,
+        input: serde_json::Value,
+        context: &ToolContext,
+    ) -> Result<openclaw_core::types::ToolResult> {
+        debug!("Executing tool: {} with id: {}", tool_name, tool_use_id);
+        self.tool_executor
+            .execute(tool_use_id, tool_name, input, Some(context))
+            .await
+    }
+
+    /// Check if a tool requires approval.
+    pub async fn tool_requires_approval(
+        &self,
+        tool_name: &str,
+        input: &serde_json::Value,
+    ) -> Result<bool> {
+        // Check tool-level approval requirement
+        let tool_requires = self.tool_executor.requires_approval(tool_name, input).await?;
+
+        // Check policy-level approval requirement
+        let policy_requires = self.approval_manager.requires_approval(tool_name, input);
+
+        Ok(tool_requires || policy_requires)
+    }
+}
+
+/// A turn in a conversation.
+#[derive(Debug, Clone)]
+pub struct ConversationTurn {
+    /// Turn number.
+    pub turn_number: usize,
+
+    /// User message (if this is a user turn).
+    pub user_message: Option<String>,
+
+    /// Assistant response.
+    pub assistant_response: Option<String>,
+
+    /// Tool uses in this turn.
+    pub tool_uses: Vec<ToolUse>,
+
+    /// Token usage for this turn.
+    pub token_usage: TokenUsage,
+}
+
+/// A tool use in a turn.
+#[derive(Debug, Clone)]
+pub struct ToolUse {
+    /// Tool use ID.
+    pub id: String,
+
+    /// Tool name.
+    pub name: String,
+
+    /// Input arguments.
+    pub input: serde_json::Value,
+
+    /// Result (if executed).
+    pub result: Option<ToolUseResult>,
+}
+
+/// Result of a tool use.
+#[derive(Debug, Clone)]
+pub struct ToolUseResult {
+    /// Output value.
+    pub output: serde_json::Value,
+
+    /// Whether it was an error.
+    pub is_error: bool,
+
+    /// Duration in milliseconds.
+    pub duration_ms: Option<u64>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::MemorySessionStore;
-
-    // Test helper to create a mock provider
-    // In real tests, you'd use mockall or similar
 
     #[test]
     fn test_runtime_config_default() {
         let config = RuntimeConfig::default();
         assert_eq!(config.max_turns, 10);
-        assert_eq!(config.max_output_tokens, 4096);
         assert!(config.enable_tools);
     }
 }

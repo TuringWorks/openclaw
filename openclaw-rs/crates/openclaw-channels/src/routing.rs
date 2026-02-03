@@ -61,6 +61,8 @@ impl Router {
             return Ok(cached.clone());
         }
 
+        let sender_name = message.sender.display_name.as_deref().unwrap_or(&message.sender.id);
+
         // Try each rule in priority order
         for rule in &self.rules {
             if rule.matches(message) {
@@ -71,7 +73,7 @@ impl Router {
                 };
                 debug!(
                     "Routed message from {} to agent {} (rule: {})",
-                    message.sender.display_name(),
+                    sender_name,
                     route_match.agent_id,
                     rule.id
                 );
@@ -88,7 +90,7 @@ impl Router {
             };
             debug!(
                 "Routed message from {} to default agent {}",
-                message.sender.display_name(),
+                sender_name,
                 default
             );
             return Ok(route_match);
@@ -96,7 +98,7 @@ impl Router {
 
         Err(ChannelError::Routing(format!(
             "No route found for message from {}",
-            message.sender.display_name()
+            sender_name
         )))
     }
 
@@ -110,8 +112,8 @@ impl Router {
         format!(
             "{}:{}:{}",
             message.channel,
-            message.account,
-            message.sender.id()
+            message.account_id,
+            message.sender.id
         )
     }
 }
@@ -192,28 +194,28 @@ impl RouteRule {
 
         // Check account
         if let Some(ref account) = self.conditions.account {
-            if message.account != *account {
+            if message.account_id != *account {
                 return false;
             }
         }
 
         // Check peer
         if let Some(ref peer) = self.conditions.peer {
-            if message.sender.id() != *peer {
+            if message.sender.id != *peer {
                 return false;
             }
         }
 
         // Check guild
         if let Some(ref guild) = self.conditions.guild {
-            if message.guild.as_deref() != Some(guild.as_str()) {
+            if message.chat.guild_id.as_deref() != Some(guild.as_str()) {
                 return false;
             }
         }
 
         // Check chat type
         if let Some(ref chat_type) = self.conditions.chat_type {
-            if message.chat_type != *chat_type {
+            if message.chat.chat_type != *chat_type {
                 return false;
             }
         }
@@ -305,28 +307,32 @@ impl RouterBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openclaw_core::types::{MessageSender, SenderType};
+    use openclaw_core::types::{ChatInfo, MessageId, SenderInfo};
 
     fn test_message(channel: &str, sender_id: &str) -> InboundMessage {
         InboundMessage {
+            id: MessageId::new("msg123"),
+            timestamp: chrono::Utc::now(),
             channel: channel.to_string(),
-            account: "test_account".to_string(),
-            sender: MessageSender {
-                sender_type: SenderType::User,
+            account_id: "test_account".to_string(),
+            sender: SenderInfo {
                 id: sender_id.to_string(),
                 username: Some("testuser".to_string()),
                 display_name: Some("Test User".to_string()),
-                phone: None,
+                phone_number: None,
+                is_bot: false,
             },
-            chat_type: ChatType::Private,
-            chat_id: "chat123".to_string(),
-            guild: None,
-            message_id: "msg123".to_string(),
-            reply_to: None,
+            chat: ChatInfo {
+                id: "chat123".to_string(),
+                chat_type: ChatType::Private,
+                title: None,
+                guild_id: None,
+            },
             text: "Hello".to_string(),
-            attachments: vec![],
-            timestamp: chrono::Utc::now(),
-            raw: None,
+            media: vec![],
+            quote: None,
+            thread: None,
+            metadata: serde_json::Value::Null,
         }
     }
 

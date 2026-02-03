@@ -4,6 +4,38 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
 
+/// Tool groups for categorization and policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolGroup {
+    /// File system tools.
+    FileSystem,
+
+    /// System/shell tools.
+    System,
+
+    /// Network/web tools.
+    Web,
+
+    /// Memory/retrieval tools.
+    Memory,
+
+    /// Session management tools.
+    Session,
+
+    /// UI/browser tools.
+    Ui,
+
+    /// Custom/plugin tools.
+    Custom,
+}
+
+impl Default for ToolGroup {
+    fn default() -> Self {
+        Self::Custom
+    }
+}
+
 /// Definition of a tool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {

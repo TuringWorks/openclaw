@@ -4,12 +4,13 @@ use crate::error::AgentError;
 use crate::Result;
 use async_trait::async_trait;
 use openclaw_core::types::{
-    ExecutionResult, ToolDefinition, ToolGroup, ToolResult,
+    ExecutionResult, ToolDefinition, ToolExecutionConfig, ToolGroup, ToolResult,
 };
 use openclaw_sandbox::{CommandExecutor, ExecutionContext, SandboxProfile};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
@@ -23,7 +24,7 @@ pub trait Tool: Send + Sync {
     fn definition(&self) -> ToolDefinition;
 
     /// Execute the tool with given arguments.
-    async fn execute(&self, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult>;
+    async fn execute(&self, tool_use_id: &str, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult>;
 
     /// Check if the tool requires approval.
     fn requires_approval(&self, _args: &serde_json::Value) -> bool {
@@ -144,11 +145,11 @@ impl ToolRegistry {
     }
 
     /// Get tool definitions for specific groups.
-    pub async fn definitions_for_groups(&self, groups: &[ToolGroup]) -> Vec<ToolDefinition> {
+    pub async fn definitions_for_groups(&self, target_groups: &[ToolGroup]) -> Vec<ToolDefinition> {
         let tools = self.tools.read().await;
         tools
             .values()
-            .filter(|t| groups.contains(&t.group()))
+            .filter(|t| target_groups.contains(&t.group()))
             .map(|t| t.definition())
             .collect()
     }
@@ -194,6 +195,7 @@ impl ToolExecutor {
     /// Execute a tool by name.
     pub async fn execute(
         &self,
+        tool_use_id: &str,
         name: &str,
         args: serde_json::Value,
         context: Option<&ToolContext>,
@@ -207,7 +209,7 @@ impl ToolExecutor {
         let ctx = context.unwrap_or(&self.default_context);
 
         debug!("Executing tool '{}' with args: {:?}", name, args);
-        tool.execute(args, ctx).await
+        tool.execute(tool_use_id, args, ctx).await
     }
 
     /// Check if a tool requires approval.
@@ -228,14 +230,16 @@ impl ToolExecutor {
             .as_ref()
             .ok_or_else(|| AgentError::config("Command executor not configured"))?;
 
+        let start = Instant::now();
         let output = executor.execute(command).await?;
+        let duration_ms = start.elapsed().as_millis() as u64;
 
         Ok(ExecutionResult {
-            success: output.success(),
-            exit_code: Some(output.exit_code),
-            stdout: Some(output.stdout),
-            stderr: Some(output.stderr),
-            duration_ms: Some(output.duration_ms),
+            exit_code: output.exit_code,
+            stdout: output.stdout,
+            stderr: output.stderr,
+            duration_ms,
+            resource_usage: None,
         })
     }
 }
@@ -318,23 +322,20 @@ impl Tool for BashTool {
                 },
                 "required": ["command"]
             }),
-            group: ToolGroup::System,
+            execution: ToolExecutionConfig::default(),
         }
     }
 
-    async fn execute(&self, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult> {
+    async fn execute(&self, tool_use_id: &str, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult> {
+        let start = Instant::now();
+
         let command = args
             .get("command")
             .and_then(|v| v.as_str())
             .ok_or_else(|| AgentError::tool_execution("Missing 'command' argument"))?;
 
         if self.is_blocked(command) {
-            return Ok(ToolResult {
-                success: false,
-                output: None,
-                error: Some("Command is blocked by security policy".to_string()),
-                metadata: HashMap::new(),
-            });
+            return Ok(ToolResult::error(tool_use_id, "Command is blocked by security policy"));
         }
 
         let exec_context = ExecutionContext::new(&context.cwd)
@@ -348,22 +349,25 @@ impl Tool for BashTool {
             .and_then(|v| v.as_u64());
 
         let output = executor.execute_with_timeout(command, timeout).await?;
+        let duration = start.elapsed();
 
-        Ok(ToolResult {
-            success: output.success(),
-            output: Some(serde_json::json!({
-                "stdout": output.stdout,
-                "stderr": output.stderr,
-                "exit_code": output.exit_code,
-                "timed_out": output.timed_out,
-            })),
-            error: if output.success() {
-                None
-            } else {
-                Some(format!("Command exited with code {}", output.exit_code))
-            },
-            metadata: HashMap::new(),
-        })
+        let result_output = serde_json::json!({
+            "stdout": output.stdout,
+            "stderr": output.stderr,
+            "exit_code": output.exit_code,
+            "timed_out": output.timed_out,
+        });
+
+        if output.success() {
+            Ok(ToolResult::success(tool_use_id, result_output).with_duration(duration))
+        } else {
+            Ok(ToolResult {
+                tool_use_id: tool_use_id.to_string(),
+                output: result_output,
+                is_error: true,
+                duration_ms: Some(duration.as_millis() as u64),
+            })
+        }
     }
 
     fn requires_approval(&self, args: &serde_json::Value) -> bool {
@@ -420,11 +424,13 @@ impl Tool for ReadTool {
                 },
                 "required": ["path"]
             }),
-            group: ToolGroup::FileSystem,
+            execution: ToolExecutionConfig::default(),
         }
     }
 
-    async fn execute(&self, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult> {
+    async fn execute(&self, tool_use_id: &str, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult> {
+        let start = Instant::now();
+
         let path = args
             .get("path")
             .and_then(|v| v.as_str())
@@ -456,15 +462,11 @@ impl Tool for ReadTool {
             .map(|(i, line)| format!("{:>6}\t{}", offset + i + 1, line))
             .collect();
 
-        Ok(ToolResult {
-            success: true,
-            output: Some(serde_json::json!({
-                "content": numbered.join("\n"),
-                "lines": lines.len(),
-            })),
-            error: None,
-            metadata: HashMap::new(),
-        })
+        let duration = start.elapsed();
+        Ok(ToolResult::success(tool_use_id, serde_json::json!({
+            "content": numbered.join("\n"),
+            "lines": lines.len(),
+        })).with_duration(duration))
     }
 
     fn group(&self) -> ToolGroup {
@@ -499,11 +501,13 @@ impl Tool for WriteTool {
                 },
                 "required": ["path", "content"]
             }),
-            group: ToolGroup::FileSystem,
+            execution: ToolExecutionConfig::default(),
         }
     }
 
-    async fn execute(&self, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult> {
+    async fn execute(&self, tool_use_id: &str, args: serde_json::Value, context: &ToolContext) -> Result<ToolResult> {
+        let start = Instant::now();
+
         let path = args
             .get("path")
             .and_then(|v| v.as_str())
@@ -531,15 +535,11 @@ impl Tool for WriteTool {
             AgentError::tool_execution(format!("Failed to write file: {}", e))
         })?;
 
-        Ok(ToolResult {
-            success: true,
-            output: Some(serde_json::json!({
-                "path": full_path.to_string_lossy(),
-                "bytes_written": content.len(),
-            })),
-            error: None,
-            metadata: HashMap::new(),
-        })
+        let duration = start.elapsed();
+        Ok(ToolResult::success(tool_use_id, serde_json::json!({
+            "path": full_path.to_string_lossy(),
+            "bytes_written": content.len(),
+        })).with_duration(duration))
     }
 
     fn requires_approval(&self, _args: &serde_json::Value) -> bool {

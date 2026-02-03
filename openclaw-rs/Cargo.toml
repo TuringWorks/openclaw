@@ -8,8 +8,6 @@ members = [
     "crates/openclaw-memory",
     "crates/openclaw-gateway",
     "crates/openclaw-cli",
-    "crates/openclaw-plugin-sdk",
-    "channels/openclaw-telegram",
 ]
 
 [workspace.package]
@@ -86,7 +84,6 @@ openclaw-channels = { path = "crates/openclaw-channels" }
 openclaw-agent = { path = "crates/openclaw-agent" }
 openclaw-memory = { path = "crates/openclaw-memory" }
 openclaw-gateway = { path = "crates/openclaw-gateway" }
-openclaw-plugin-sdk = { path = "crates/openclaw-plugin-sdk" }
 
 [profile.release]
 lto = "thin"

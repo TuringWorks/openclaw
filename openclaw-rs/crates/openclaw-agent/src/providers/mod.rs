@@ -2,59 +2,49 @@
 
 pub mod anthropic;
 
-use crate::error::AgentError;
 use crate::Result;
 use async_trait::async_trait;
 use futures::Stream;
-use openclaw_core::types::{ContentBlock, Message, TokenUsage, ToolDefinition};
+use openclaw_core::types::{Message, MessageContent, TokenUsage, ToolDefinition};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
-/// Response from a model generation.
+/// Response from a model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenerateResponse {
+pub struct ModelResponse {
     /// Generated content.
-    pub content: Vec<ContentBlock>,
-
-    /// Token usage.
-    pub usage: TokenUsage,
+    pub content: MessageContent,
 
     /// Stop reason.
     pub stop_reason: Option<String>,
 
-    /// Model used.
-    pub model: String,
+    /// Token usage.
+    pub token_usage: TokenUsage,
 }
 
 /// Streaming event from model generation.
 #[derive(Debug, Clone)]
 pub enum StreamEvent {
-    /// Text delta.
-    TextDelta { text: String },
+    /// Stream started.
+    Start,
+
+    /// Text content.
+    Text(String),
 
     /// Thinking text (for extended thinking).
-    ThinkingDelta { text: String },
+    Thinking(String),
 
-    /// Tool use start.
-    ToolUseStart { id: String, name: String },
-
-    /// Tool use input delta.
-    ToolUseInput { input: serde_json::Value },
-
-    /// Tool use end.
-    ToolUseEnd,
-
-    /// Tool result.
-    ToolResult {
-        tool_use_id: String,
-        content: String,
-        is_error: bool,
+    /// Tool use.
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
     },
 
     /// Token usage update.
     Usage(TokenUsage),
 
-    /// Message complete.
+    /// Stream completed.
     Done,
 
     /// Error occurred.
@@ -67,33 +57,22 @@ pub trait ModelProvider: Send + Sync {
     /// Get the provider name.
     fn name(&self) -> &str;
 
-    /// List available models.
-    async fn list_models(&self) -> Result<Vec<String>>;
+    /// Get the current model.
+    fn model(&self) -> &str;
 
     /// Generate a response (non-streaming).
-    async fn generate(
+    async fn complete(
         &self,
-        model: &str,
         messages: &[Message],
-        system: &Option<String>,
         tools: &[ToolDefinition],
-        max_tokens: usize,
-        temperature: f32,
-    ) -> Result<GenerateResponse>;
+    ) -> Result<ModelResponse>;
 
     /// Generate a response (streaming).
-    fn generate_stream(
+    fn complete_stream(
         &self,
-        model: &str,
         messages: &[Message],
-        system: &Option<String>,
         tools: &[ToolDefinition],
-        max_tokens: usize,
-        temperature: f32,
     ) -> Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send + '_>>;
-
-    /// Count tokens for messages.
-    async fn count_tokens(&self, messages: &[Message]) -> Result<usize>;
 }
 
 pub use anthropic::AnthropicProvider;

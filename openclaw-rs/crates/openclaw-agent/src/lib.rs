@@ -15,7 +15,7 @@ pub mod approval;
 
 pub use error::AgentError;
 pub use runtime::{AgentRuntime, RuntimeConfig};
-pub use session::{Session, SessionManager, SessionStore};
+pub use session::{Session, SessionManager, SessionState};
 pub use tools::{Tool, ToolExecutor, ToolRegistry};
 pub use approval::{ApprovalManager, ApprovalRequest, ApprovalResponse};
 

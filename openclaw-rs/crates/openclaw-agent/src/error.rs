@@ -129,6 +129,11 @@ impl AgentError {
         Self::RateLimit { retry_after_secs }
     }
 
+    /// Create a provider error.
+    pub fn provider(msg: impl Into<String>) -> Self {
+        Self::ModelApi(msg.into())
+    }
+
     /// Check if this error is retriable.
     pub fn is_retriable(&self) -> bool {
         matches!(

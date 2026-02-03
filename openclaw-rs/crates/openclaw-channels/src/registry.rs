@@ -242,9 +242,9 @@ impl ChannelRegistry {
                     health_map.insert(
                         id.clone(),
                         ChannelHealth {
-                            connected: false,
+                            status: openclaw_core::types::HealthStatus::Unhealthy,
                             latency_ms: None,
-                            last_message: None,
+                            last_message_at: None,
                             error: Some(e.to_string()),
                         },
                     );

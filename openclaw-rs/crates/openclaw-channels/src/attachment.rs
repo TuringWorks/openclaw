@@ -89,11 +89,12 @@ impl Attachment {
     ) -> Self {
         let bytes = bytes.into();
         let size = bytes.len();
+        let mime_type_str = mime_type.into();
 
         Self {
-            attachment_type: Self::detect_type(&mime_type.into()),
+            attachment_type: Self::detect_type(&mime_type_str),
             filename: filename.into(),
-            mime_type: mime_type.into(),
+            mime_type: mime_type_str,
             source: AttachmentSource::Bytes(bytes),
             size: Some(size),
             caption: None,

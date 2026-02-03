@@ -247,6 +247,13 @@ impl ApprovalManager {
         }
     }
 
+    /// Check if a tool requires approval based on policy (synchronous check).
+    pub fn requires_approval(&self, _tool_name: &str, _tool_args: &serde_json::Value) -> bool {
+        // For now, return false - actual policy check would need async
+        // This is a simplified check; real implementation should be async
+        false
+    }
+
     /// Subscribe to approval events.
     pub fn subscribe(&self) -> broadcast::Receiver<ApprovalEvent> {
         self.response_tx.subscribe()

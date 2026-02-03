@@ -23,18 +23,22 @@ pub trait Channel: ChannelSender + ChannelReceiver + ChannelLifecycle + Send + S
 
     /// Check if the channel supports a specific feature.
     fn supports(&self, feature: ChannelFeature) -> bool {
+        let caps = self.capabilities();
         match feature {
-            ChannelFeature::Markdown => self.capabilities().markdown,
-            ChannelFeature::Html => self.capabilities().html,
-            ChannelFeature::Images => self.capabilities().images,
-            ChannelFeature::Audio => self.capabilities().audio,
-            ChannelFeature::Video => self.capabilities().video,
-            ChannelFeature::Files => self.capabilities().files,
-            ChannelFeature::Reactions => self.capabilities().reactions,
-            ChannelFeature::Threads => self.capabilities().threads,
-            ChannelFeature::Edits => self.capabilities().edits,
-            ChannelFeature::Deletes => self.capabilities().deletes,
-            ChannelFeature::Buttons => self.capabilities().buttons,
+            ChannelFeature::Images => caps.media.images,
+            ChannelFeature::Audio => caps.media.audio,
+            ChannelFeature::Video => caps.media.video,
+            ChannelFeature::Files => caps.media.files,
+            ChannelFeature::Stickers => caps.media.stickers,
+            ChannelFeature::VoiceNotes => caps.media.voice_notes,
+            ChannelFeature::Reactions => caps.features.reactions,
+            ChannelFeature::Threads => caps.features.threads,
+            ChannelFeature::Edits => caps.features.edits,
+            ChannelFeature::Deletes => caps.features.deletes,
+            ChannelFeature::TypingIndicators => caps.features.typing_indicators,
+            ChannelFeature::ReadReceipts => caps.features.read_receipts,
+            ChannelFeature::Mentions => caps.features.mentions,
+            ChannelFeature::Polls => caps.features.polls,
         }
     }
 }
@@ -42,17 +46,20 @@ pub trait Channel: ChannelSender + ChannelReceiver + ChannelLifecycle + Send + S
 /// Channel features that can be queried.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChannelFeature {
-    Markdown,
-    Html,
     Images,
     Audio,
     Video,
     Files,
+    Stickers,
+    VoiceNotes,
     Reactions,
     Threads,
     Edits,
     Deletes,
-    Buttons,
+    TypingIndicators,
+    ReadReceipts,
+    Mentions,
+    Polls,
 }
 
 /// Trait for sending messages through a channel.

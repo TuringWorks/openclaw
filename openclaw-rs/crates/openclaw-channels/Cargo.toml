@@ -36,6 +36,12 @@ mime_guess = "2.0"
 # URL handling
 url = "2.5"
 
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 mockall = "0.12"

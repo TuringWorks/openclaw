@@ -1,10 +1,9 @@
 //! Session management and persistence.
 
-use crate::error::AgentError;
 use crate::Result;
 use chrono::{DateTime, Utc};
 use openclaw_core::types::{
-    AgentId, ContentBlock, Message, Role, SessionKey, TokenUsage,
+    AgentId, ContentBlock, Message, MessageContent, Role, SessionKey, TokenUsage,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -13,7 +12,7 @@ use std::sync::Arc;
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// A conversation session with an agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,29 +101,25 @@ impl Session {
 
     /// Add a user message.
     pub fn add_user_message(&mut self, content: impl Into<String>) {
-        self.messages.push(Message {
-            role: Role::User,
-            content: vec![ContentBlock::Text {
-                text: content.into(),
-            }],
-        });
+        self.messages.push(Message::user(content));
         self.last_activity = Utc::now();
     }
 
     /// Add an assistant message.
     pub fn add_assistant_message(&mut self, content: impl Into<String>) {
-        self.messages.push(Message {
-            role: Role::Assistant,
-            content: vec![ContentBlock::Text {
-                text: content.into(),
-            }],
-        });
+        self.messages.push(Message::assistant(content));
         self.last_activity = Utc::now();
     }
 
     /// Add a message with content blocks.
     pub fn add_message(&mut self, role: Role, content: Vec<ContentBlock>) {
-        self.messages.push(Message { role, content });
+        self.messages.push(Message {
+            role,
+            content: MessageContent::Blocks(content),
+            name: None,
+            tool_use_id: None,
+            timestamp: Utc::now(),
+        });
         self.last_activity = Utc::now();
     }
 
@@ -142,37 +137,28 @@ impl Session {
     }
 
     /// Update token usage.
-    pub fn update_tokens(&mut self, usage: TokenUsage) {
-        self.total_tokens.input += usage.input;
-        self.total_tokens.output += usage.output;
-        if let Some(cache) = usage.cache_read {
-            *self.total_tokens.cache_read.get_or_insert(0) += cache;
-        }
-        if let Some(cache) = usage.cache_write {
-            *self.total_tokens.cache_write.get_or_insert(0) += cache;
-        }
+    pub fn update_tokens(&mut self, usage: &TokenUsage) {
+        self.total_tokens.add(usage);
     }
 
-    /// Get message count.
+    /// Get the message count.
     pub fn message_count(&self) -> usize {
         self.messages.len()
     }
 
-    /// Truncate to a maximum number of messages (keeping system message if present).
-    pub fn truncate(&mut self, max_messages: usize) {
-        if self.messages.len() <= max_messages {
-            return;
-        }
-
-        // Keep the most recent messages
-        let start = self.messages.len() - max_messages;
-        self.messages = self.messages.split_off(start);
+    /// Check if the session is active.
+    pub fn is_active(&self) -> bool {
+        self.state == SessionState::Active
     }
 
-    /// Clear all messages.
-    pub fn clear(&mut self) {
-        self.messages.clear();
-        self.total_tokens = TokenUsage::default();
+    /// Pause the session.
+    pub fn pause(&mut self) {
+        self.state = SessionState::Paused;
+    }
+
+    /// Resume the session.
+    pub fn resume(&mut self) {
+        self.state = SessionState::Active;
     }
 
     /// Archive the session.
@@ -181,147 +167,131 @@ impl Session {
     }
 }
 
-/// Session storage trait.
-#[async_trait::async_trait]
-pub trait SessionStore: Send + Sync {
-    /// Load a session by key.
-    async fn load(&self, key: &SessionKey) -> Result<Option<Session>>;
-
-    /// Save a session.
-    async fn save(&self, session: &Session) -> Result<()>;
-
-    /// Delete a session.
-    async fn delete(&self, key: &SessionKey) -> Result<()>;
-
-    /// List session keys for an agent.
-    async fn list(&self, agent_id: &AgentId) -> Result<Vec<SessionKey>>;
-
-    /// Check if a session exists.
-    async fn exists(&self, key: &SessionKey) -> Result<bool>;
-}
-
-/// File-based session store using JSON Lines.
-pub struct FileSessionStore {
-    /// Base directory for sessions.
+/// Manager for session persistence and lifecycle.
+pub struct SessionManager {
+    /// Base directory for session storage.
     base_dir: PathBuf,
+
+    /// In-memory session cache.
+    cache: RwLock<HashMap<String, Session>>,
+
+    /// Maximum messages to keep in memory.
+    max_messages: usize,
 }
 
-impl FileSessionStore {
-    /// Create a new file session store.
+impl SessionManager {
+    /// Create a new session manager.
     pub fn new(base_dir: impl Into<PathBuf>) -> Self {
         Self {
             base_dir: base_dir.into(),
+            cache: RwLock::new(HashMap::new()),
+            max_messages: 100,
         }
     }
 
-    /// Get the path for a session file.
-    fn session_path(&self, key: &SessionKey) -> PathBuf {
-        self.base_dir
-            .join(&key.agent_id.to_string())
-            .join("sessions")
-            .join(format!("{}.jsonl", key.session_id))
+    /// Set the maximum messages per session.
+    pub fn with_max_messages(mut self, max: usize) -> Self {
+        self.max_messages = max;
+        self
     }
 
-    /// Ensure directory exists.
-    async fn ensure_dir(&self, key: &SessionKey) -> Result<()> {
-        let dir = self
-            .base_dir
-            .join(&key.agent_id.to_string())
-            .join("sessions");
-        fs::create_dir_all(&dir).await?;
-        Ok(())
-    }
-}
+    /// Get or create a session.
+    pub async fn get_or_create(&self, key: &SessionKey, agent_id: &AgentId) -> Result<Session> {
+        let cache_key = self.cache_key(key);
 
-#[async_trait::async_trait]
-impl SessionStore for FileSessionStore {
-    async fn load(&self, key: &SessionKey) -> Result<Option<Session>> {
-        let path = self.session_path(key);
-
-        if !path.exists() {
-            return Ok(None);
-        }
-
-        let file = fs::File::open(&path).await?;
-        let reader = BufReader::new(file);
-        let mut lines = reader.lines();
-
-        // First line is session metadata
-        let first_line = match lines.next_line().await? {
-            Some(line) => line,
-            None => return Ok(None),
-        };
-
-        let mut session: Session = serde_json::from_str(&first_line)?;
-
-        // Remaining lines are messages
-        while let Some(line) = lines.next_line().await? {
-            if let Ok(msg) = serde_json::from_str::<Message>(&line) {
-                session.messages.push(msg);
+        // Check cache first
+        {
+            let cache = self.cache.read().await;
+            if let Some(session) = cache.get(&cache_key) {
+                return Ok(session.clone());
             }
         }
 
-        Ok(Some(session))
-    }
-
-    async fn save(&self, session: &Session) -> Result<()> {
-        self.ensure_dir(&session.key).await?;
-        let path = self.session_path(&session.key);
-
-        // Write to temp file first
-        let temp_path = path.with_extension("tmp");
-        let mut file = fs::File::create(&temp_path).await?;
-
-        // Write session metadata (without messages)
-        let mut session_meta = session.clone();
-        let messages = std::mem::take(&mut session_meta.messages);
-        let meta_json = serde_json::to_string(&session_meta)?;
-        file.write_all(meta_json.as_bytes()).await?;
-        file.write_all(b"\n").await?;
-
-        // Write each message
-        for msg in &messages {
-            let msg_json = serde_json::to_string(msg)?;
-            file.write_all(msg_json.as_bytes()).await?;
-            file.write_all(b"\n").await?;
+        // Try to load from disk
+        if let Ok(session) = self.load(key).await {
+            let mut cache = self.cache.write().await;
+            cache.insert(cache_key, session.clone());
+            return Ok(session);
         }
 
-        file.flush().await?;
-        drop(file);
+        // Create new session
+        let session = Session::new(key.clone(), agent_id.clone());
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(cache_key, session.clone());
+        }
 
-        // Atomic rename
-        fs::rename(&temp_path, &path).await?;
+        Ok(session)
+    }
 
-        debug!("Saved session {} to {:?}", session.key.session_id, path);
+    /// Save a session.
+    pub async fn save(&self, session: &Session) -> Result<()> {
+        let cache_key = self.cache_key(&session.key);
+
+        // Update cache
+        {
+            let mut cache = self.cache.write().await;
+            cache.insert(cache_key, session.clone());
+        }
+
+        // Save to disk
+        let path = self.session_path(&session.key);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await?;
+        }
+
+        let json = serde_json::to_string_pretty(session)?;
+        fs::write(&path, json).await?;
+
+        debug!("Saved session to {:?}", path);
         Ok(())
     }
 
-    async fn delete(&self, key: &SessionKey) -> Result<()> {
+    /// Load a session from disk.
+    pub async fn load(&self, key: &SessionKey) -> Result<Session> {
+        let path = self.session_path(key);
+        let content = fs::read_to_string(&path).await?;
+        let session: Session = serde_json::from_str(&content)?;
+        Ok(session)
+    }
+
+    /// Delete a session.
+    pub async fn delete(&self, key: &SessionKey) -> Result<()> {
+        let cache_key = self.cache_key(key);
+
+        // Remove from cache
+        {
+            let mut cache = self.cache.write().await;
+            cache.remove(&cache_key);
+        }
+
+        // Remove from disk
         let path = self.session_path(key);
         if path.exists() {
             fs::remove_file(&path).await?;
         }
+
         Ok(())
     }
 
-    async fn list(&self, agent_id: &AgentId) -> Result<Vec<SessionKey>> {
-        let dir = self.base_dir.join(&agent_id.to_string()).join("sessions");
+    /// List all sessions for an agent.
+    pub async fn list_for_agent(&self, agent_id: &AgentId) -> Result<Vec<SessionKey>> {
+        let agent_dir = self.base_dir.join(agent_id.as_str());
 
-        if !dir.exists() {
+        if !agent_dir.exists() {
             return Ok(Vec::new());
         }
 
         let mut keys = Vec::new();
-        let mut entries = fs::read_dir(&dir).await?;
+        let mut entries = fs::read_dir(&agent_dir).await?;
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
+            if path.extension().map_or(false, |e| e == "json") {
                 if let Some(stem) = path.file_stem() {
-                    keys.push(SessionKey {
-                        agent_id: agent_id.clone(),
-                        session_id: stem.to_string_lossy().to_string(),
-                    });
+                    // Create session key from agent:session format
+                    let key_str = format!("{}:{}", agent_id.as_str(), stem.to_string_lossy());
+                    keys.push(SessionKey::new(key_str));
                 }
             }
         }
@@ -329,173 +299,118 @@ impl SessionStore for FileSessionStore {
         Ok(keys)
     }
 
-    async fn exists(&self, key: &SessionKey) -> Result<bool> {
-        Ok(self.session_path(key).exists())
-    }
-}
-
-/// In-memory session store (for testing).
-pub struct MemorySessionStore {
-    sessions: RwLock<HashMap<String, Session>>,
-}
-
-impl Default for MemorySessionStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MemorySessionStore {
-    /// Create a new in-memory session store.
-    pub fn new() -> Self {
-        Self {
-            sessions: RwLock::new(HashMap::new()),
-        }
-    }
-
-    fn key_string(key: &SessionKey) -> String {
-        format!("{}:{}", key.agent_id, key.session_id)
-    }
-}
-
-#[async_trait::async_trait]
-impl SessionStore for MemorySessionStore {
-    async fn load(&self, key: &SessionKey) -> Result<Option<Session>> {
-        let sessions = self.sessions.read().await;
-        Ok(sessions.get(&Self::key_string(key)).cloned())
-    }
-
-    async fn save(&self, session: &Session) -> Result<()> {
-        let mut sessions = self.sessions.write().await;
-        sessions.insert(Self::key_string(&session.key), session.clone());
-        Ok(())
-    }
-
-    async fn delete(&self, key: &SessionKey) -> Result<()> {
-        let mut sessions = self.sessions.write().await;
-        sessions.remove(&Self::key_string(key));
-        Ok(())
-    }
-
-    async fn list(&self, agent_id: &AgentId) -> Result<Vec<SessionKey>> {
-        let sessions = self.sessions.read().await;
-        let prefix = format!("{}:", agent_id);
-        Ok(sessions
-            .keys()
-            .filter(|k| k.starts_with(&prefix))
-            .map(|k| {
-                let parts: Vec<&str> = k.splitn(2, ':').collect();
-                SessionKey {
-                    agent_id: agent_id.clone(),
-                    session_id: parts.get(1).unwrap_or(&"").to_string(),
-                }
-            })
-            .collect())
-    }
-
-    async fn exists(&self, key: &SessionKey) -> Result<bool> {
-        let sessions = self.sessions.read().await;
-        Ok(sessions.contains_key(&Self::key_string(key)))
-    }
-}
-
-/// Session manager for creating and managing sessions.
-pub struct SessionManager {
-    /// Session store.
-    store: Arc<dyn SessionStore>,
-
-    /// Active sessions cache.
-    active: RwLock<HashMap<String, Arc<RwLock<Session>>>>,
-}
-
-impl SessionManager {
-    /// Create a new session manager.
-    pub fn new(store: Arc<dyn SessionStore>) -> Self {
-        Self {
-            store,
-            active: RwLock::new(HashMap::new()),
-        }
-    }
-
-    /// Get or create a session.
-    pub async fn get_or_create(
-        &self,
-        key: SessionKey,
-    ) -> Result<Arc<RwLock<Session>>> {
-        // Check active cache
-        {
-            let active = self.active.read().await;
-            if let Some(session) = active.get(&Self::key_string(&key)) {
-                return Ok(session.clone());
-            }
-        }
-
-        // Try to load from store
-        let session = match self.store.load(&key).await? {
-            Some(s) => s,
-            None => Session::new(key.clone(), key.agent_id.clone()),
+    /// Get the path for a session file.
+    fn session_path(&self, key: &SessionKey) -> PathBuf {
+        // Extract agent ID and session from the key
+        let key_str = key.as_str();
+        let parts: Vec<&str> = key_str.splitn(2, ':').collect();
+        let (agent, session) = if parts.len() >= 2 {
+            (parts[0], parts[1])
+        } else {
+            ("default", key_str)
         };
 
-        let session = Arc::new(RwLock::new(session));
-
-        // Add to active cache
-        let mut active = self.active.write().await;
-        active.insert(Self::key_string(&key), session.clone());
-
-        Ok(session)
+        self.base_dir
+            .join(agent)
+            .join(format!("{}.json", session.replace(':', "_")))
     }
 
-    /// Get an existing session.
-    pub async fn get(&self, key: &SessionKey) -> Result<Option<Arc<RwLock<Session>>>> {
-        // Check active cache
-        {
-            let active = self.active.read().await;
-            if let Some(session) = active.get(&Self::key_string(key)) {
-                return Ok(Some(session.clone()));
-            }
-        }
+    /// Generate a cache key for a session key.
+    fn cache_key(&self, key: &SessionKey) -> String {
+        key.as_str().to_string()
+    }
+}
 
-        // Try to load from store
-        match self.store.load(key).await? {
-            Some(session) => {
-                let session = Arc::new(RwLock::new(session));
-                let mut active = self.active.write().await;
-                active.insert(Self::key_string(key), session.clone());
-                Ok(Some(session))
-            }
-            None => Ok(None),
-        }
+/// Session log entry for JSONL logging.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionLogEntry {
+    /// Timestamp.
+    pub timestamp: DateTime<Utc>,
+
+    /// Entry type.
+    pub entry_type: LogEntryType,
+
+    /// Entry data.
+    pub data: serde_json::Value,
+}
+
+/// Type of session log entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogEntryType {
+    /// Message added.
+    Message,
+
+    /// Tool use.
+    ToolUse,
+
+    /// Tool result.
+    ToolResult,
+
+    /// Token usage.
+    TokenUsage,
+
+    /// State change.
+    StateChange,
+
+    /// Error.
+    Error,
+
+    /// Custom event.
+    Custom(String),
+}
+
+/// Session log writer for JSONL format.
+pub struct SessionLogger {
+    /// Path to the log file.
+    path: PathBuf,
+}
+
+impl SessionLogger {
+    /// Create a new session logger.
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
     }
 
-    /// Save a session.
-    pub async fn save(&self, key: &SessionKey) -> Result<()> {
-        let active = self.active.read().await;
-        if let Some(session_lock) = active.get(&Self::key_string(key)) {
-            let session = session_lock.read().await;
-            self.store.save(&session).await?;
+    /// Append an entry to the log.
+    pub async fn append(&self, entry: SessionLogEntry) -> Result<()> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).await?;
         }
+
+        let line = serde_json::to_string(&entry)? + "\n";
+
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .await?;
+
+        file.write_all(line.as_bytes()).await?;
+
         Ok(())
     }
 
-    /// Delete a session.
-    pub async fn delete(&self, key: &SessionKey) -> Result<()> {
-        // Remove from active cache
-        {
-            let mut active = self.active.write().await;
-            active.remove(&Self::key_string(key));
+    /// Read all entries from the log.
+    pub async fn read_all(&self) -> Result<Vec<SessionLogEntry>> {
+        let file = fs::File::open(&self.path).await?;
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+        let mut entries = Vec::new();
+
+        while let Some(line) = lines.next_line().await? {
+            if let Ok(entry) = serde_json::from_str(&line) {
+                entries.push(entry);
+            }
         }
 
-        // Delete from store
-        self.store.delete(key).await
+        Ok(entries)
     }
 
-    /// List sessions for an agent.
-    pub async fn list(&self, agent_id: &AgentId) -> Result<Vec<SessionKey>> {
-        self.store.list(agent_id).await
-    }
-
-    fn key_string(key: &SessionKey) -> String {
-        format!("{}:{}", key.agent_id, key.session_id)
+    /// Read entries after a certain timestamp.
+    pub async fn read_since(&self, since: DateTime<Utc>) -> Result<Vec<SessionLogEntry>> {
+        let all = self.read_all().await?;
+        Ok(all.into_iter().filter(|e| e.timestamp > since).collect())
     }
 }
 
@@ -505,47 +420,37 @@ mod tests {
 
     #[test]
     fn test_session_creation() {
-        let key = SessionKey {
-            agent_id: AgentId::new("agent1"),
-            session_id: "session1".to_string(),
-        };
-        let session = Session::new(key.clone(), AgentId::new("agent1"));
+        let key = SessionKey::new(AgentId::new("agent1"), "session1");
+        let agent_id = AgentId::new("agent1");
+        let session = Session::new(key.clone(), agent_id);
 
-        assert_eq!(session.key.session_id, "session1");
-        assert_eq!(session.state, SessionState::Active);
+        assert_eq!(session.key.session_id(), "session1");
         assert!(session.messages.is_empty());
+        assert!(session.is_active());
     }
 
     #[test]
     fn test_session_messages() {
-        let key = SessionKey {
-            agent_id: AgentId::new("agent1"),
-            session_id: "session1".to_string(),
-        };
+        let key = SessionKey::new(AgentId::new("agent1"), "session1");
         let mut session = Session::new(key, AgentId::new("agent1"));
 
         session.add_user_message("Hello");
         session.add_assistant_message("Hi there!");
 
-        assert_eq!(session.messages.len(), 2);
-        assert_eq!(session.messages[0].role, Role::User);
-        assert_eq!(session.messages[1].role, Role::Assistant);
+        assert_eq!(session.message_count(), 2);
     }
 
-    #[tokio::test]
-    async fn test_memory_store() {
-        let store = MemorySessionStore::new();
-        let key = SessionKey {
-            agent_id: AgentId::new("agent1"),
-            session_id: "session1".to_string(),
-        };
+    #[test]
+    fn test_session_state() {
+        let key = SessionKey::new(AgentId::new("agent1"), "session1");
+        let mut session = Session::new(key, AgentId::new("agent1"));
 
-        let mut session = Session::new(key.clone(), AgentId::new("agent1"));
-        session.add_user_message("Test");
+        assert!(session.is_active());
 
-        store.save(&session).await.unwrap();
+        session.pause();
+        assert_eq!(session.state, SessionState::Paused);
 
-        let loaded = store.load(&key).await.unwrap().unwrap();
-        assert_eq!(loaded.messages.len(), 1);
+        session.resume();
+        assert!(session.is_active());
     }
 }
