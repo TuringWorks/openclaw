@@ -363,23 +363,23 @@ impl ChannelSender for TelegramChannel {
         Ok(SendResult::new(last_msg_id.unwrap_or_default()))
     }
 
-    async fn edit(&self, message_id: &str, new_content: &str) -> Result<()> {
+    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
         // Would need chat_id stored somewhere
         warn!("Edit not fully implemented - need chat_id context");
         Ok(())
     }
 
-    async fn delete(&self, message_id: &str) -> Result<()> {
+    async fn delete(&self, _message_id: &str) -> Result<()> {
         warn!("Delete not fully implemented - need chat_id context");
         Ok(())
     }
 
-    async fn react(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn react(&self, _message_id: &str, _emoji: &str) -> Result<()> {
         warn!("React not implemented for Telegram");
         Ok(())
     }
 
-    async fn unreact(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn unreact(&self, _message_id: &str, _emoji: &str) -> Result<()> {
         warn!("Unreact not implemented for Telegram");
         Ok(())
     }
@@ -408,7 +408,7 @@ impl ChannelSender for TelegramChannel {
 #[async_trait]
 impl ChannelReceiver for TelegramChannel {
     async fn start_receiving(&self) -> Result<()> {
-        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        let (shutdown_tx, _shutdown_rx) = tokio::sync::oneshot::channel();
 
         {
             let mut shutdown = self.shutdown.write().await;
@@ -421,14 +421,14 @@ impl ChannelReceiver for TelegramChannel {
 
         tokio::spawn(async move {
             let handler = Update::filter_message().endpoint(
-                move |bot: Bot, msg: teloxide::types::Message| {
+                move |_bot: Bot, msg: teloxide::types::Message| {
                     let tx = tx.clone();
                     let channel = channel.clone();
                     async move {
                         if let Some(inbound) = channel.convert_message(&msg).await {
                             let _ = tx.send(inbound).await;
                         }
-                        Ok(())
+                        respond(())
                     }
                 },
             );
