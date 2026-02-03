@@ -1,0 +1,52 @@
+[package]
+name = "openclaw-agent"
+version = "0.1.0"
+edition = "2021"
+description = "Agent runtime and session management for OpenClaw"
+license = "MIT"
+readme = "README.md"
+
+[dependencies]
+openclaw-core = { path = "../openclaw-core" }
+openclaw-sandbox = { path = "../openclaw-sandbox" }
+openclaw-channels = { path = "../openclaw-channels" }
+
+# Async runtime
+tokio = { version = "1.35", features = ["full", "sync", "time"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client (for model API calls)
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"], default-features = false }
+
+# Streaming
+tokio-stream = "0.1"
+async-stream = "0.3"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1.6", features = ["v4"] }
+
+# JSON lines for session logs
+jsonlines = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"
+mockall = "0.12"
+
+[features]
+default = []

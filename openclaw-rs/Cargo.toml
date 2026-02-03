@@ -1,0 +1,104 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openclaw-core",
+    "crates/openclaw-sandbox",
+    "crates/openclaw-channels",
+    "crates/openclaw-agent",
+    "crates/openclaw-memory",
+    "crates/openclaw-gateway",
+    "crates/openclaw-cli",
+    "crates/openclaw-plugin-sdk",
+    "channels/openclaw-telegram",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/openclaw/openclaw-rs"
+authors = ["OpenClaw Contributors"]
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# Web framework
+axum = { version = "0.7", features = ["ws", "macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# WebSocket
+tokio-tungstenite = "0.21"
+
+# HTTP client
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+json5 = "0.4"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "json"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Security
+ring = "0.17"
+rustls = "0.22"
+zeroize = { version = "1.7", features = ["derive"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive", "env"] }
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+url = "2.5"
+bytes = "1.5"
+dashmap = "5.5"
+base64 = "0.21"
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+parking_lot = "0.12"
+once_cell = "1.19"
+regex = "1.10"
+
+# Channels
+teloxide = { version = "0.12", features = ["macros"] }
+
+# Internal crates
+openclaw-core = { path = "crates/openclaw-core" }
+openclaw-sandbox = { path = "crates/openclaw-sandbox" }
+openclaw-channels = { path = "crates/openclaw-channels" }
+openclaw-agent = { path = "crates/openclaw-agent" }
+openclaw-memory = { path = "crates/openclaw-memory" }
+openclaw-gateway = { path = "crates/openclaw-gateway" }
+openclaw-plugin-sdk = { path = "crates/openclaw-plugin-sdk" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release-debug]
+inherits = "release"
+debug = true
+strip = false
