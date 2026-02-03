@@ -420,18 +420,18 @@ mod tests {
 
     #[test]
     fn test_session_creation() {
-        let key = SessionKey::new(AgentId::new("agent1"), "session1");
+        let key = SessionKey::new("agent1:session1");
         let agent_id = AgentId::new("agent1");
         let session = Session::new(key.clone(), agent_id);
 
-        assert_eq!(session.key.session_id(), "session1");
+        assert_eq!(session.key.as_str(), "agent1:session1");
         assert!(session.messages.is_empty());
         assert!(session.is_active());
     }
 
     #[test]
     fn test_session_messages() {
-        let key = SessionKey::new(AgentId::new("agent1"), "session1");
+        let key = SessionKey::new("agent1:session1");
         let mut session = Session::new(key, AgentId::new("agent1"));
 
         session.add_user_message("Hello");
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_session_state() {
-        let key = SessionKey::new(AgentId::new("agent1"), "session1");
+        let key = SessionKey::new("agent1:session1");
         let mut session = Session::new(key, AgentId::new("agent1"));
 
         assert!(session.is_active());

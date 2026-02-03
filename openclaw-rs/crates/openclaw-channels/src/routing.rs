@@ -324,7 +324,7 @@ mod tests {
             },
             chat: ChatInfo {
                 id: "chat123".to_string(),
-                chat_type: ChatType::Private,
+                chat_type: ChatType::Direct,
                 title: None,
                 guild_id: None,
             },
