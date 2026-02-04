@@ -15,11 +15,12 @@ use openclaw_core::types::{
     HealthStatus, InboundMessage, MediaAttachment, MediaCapabilities, MediaType, MessageId,
     MessageTarget, OutboundMessage, ParseMode as CoreParseMode, QuotedMessage, SenderInfo,
 };
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InputFile, MediaKind, MessageKind, ParseMode};
 use tokio::sync::{mpsc, RwLock};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 /// Telegram channel implementation.
 pub struct TelegramChannel {
@@ -213,6 +214,92 @@ impl TelegramChannel {
         }
 
         attachments
+    }
+
+    /// Call the Telegram Bot API setMessageReaction endpoint directly.
+    /// This bypasses teloxide since it doesn't yet support Bot API 7.0+ reactions.
+    async fn set_message_reaction(
+        &self,
+        chat_id: i64,
+        message_id: i32,
+        reactions: Vec<ReactionType>,
+    ) -> Result<()> {
+        let url = format!(
+            "https://api.telegram.org/bot{}/setMessageReaction",
+            self.bot.token()
+        );
+
+        let request = SetMessageReactionRequest {
+            chat_id,
+            message_id,
+            reaction: reactions,
+            is_big: None,
+        };
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| ChannelError::channel("telegram", format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        let body: TelegramApiResponse = response
+            .json()
+            .await
+            .map_err(|e| ChannelError::channel("telegram", format!("Failed to parse response: {}", e)))?;
+
+        if !body.ok {
+            let error_msg = body.description.unwrap_or_else(|| format!("HTTP {}", status));
+            return Err(ChannelError::channel("telegram", error_msg));
+        }
+
+        Ok(())
+    }
+}
+
+/// Request body for setMessageReaction API call.
+#[derive(Debug, Serialize)]
+struct SetMessageReactionRequest {
+    chat_id: i64,
+    message_id: i32,
+    reaction: Vec<ReactionType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_big: Option<bool>,
+}
+
+/// Telegram API response wrapper.
+#[derive(Debug, Deserialize)]
+struct TelegramApiResponse {
+    ok: bool,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+/// Telegram reaction type for Bot API 7.0+.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ReactionType {
+    /// Standard emoji reaction.
+    Emoji {
+        emoji: String,
+    },
+    /// Custom emoji reaction (Telegram Premium).
+    CustomEmoji {
+        custom_emoji_id: String,
+    },
+}
+
+impl ReactionType {
+    /// Create an emoji reaction.
+    pub fn emoji(emoji: impl Into<String>) -> Self {
+        Self::Emoji { emoji: emoji.into() }
+    }
+
+    /// Create a custom emoji reaction.
+    pub fn custom_emoji(id: impl Into<String>) -> Self {
+        Self::CustomEmoji { custom_emoji_id: id.into() }
     }
 }
 
@@ -408,22 +495,43 @@ impl ChannelSender for TelegramChannel {
     }
 
     async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
-        // Telegram Bot API setMessageReaction requires Bot API 7.0+
-        // teloxide 0.12 doesn't expose this yet - needs raw API call
-        warn!(
-            "Telegram reactions not yet supported in teloxide 0.12: {} on {}:{}",
-            emoji, message.chat_id, message.message_id
+        let chat_id = message
+            .chat_id
+            .parse::<i64>()
+            .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?;
+        let message_id = message
+            .message_id
+            .parse::<i32>()
+            .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?;
+
+        debug!(
+            "Setting Telegram reaction {} on {}:{}",
+            emoji, chat_id, message_id
         );
-        Ok(())
+
+        // Use raw API call since teloxide 0.12 doesn't support Bot API 7.0+ reactions
+        self.set_message_reaction(chat_id, message_id, vec![ReactionType::emoji(emoji)])
+            .await
     }
 
-    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()> {
-        // Telegram Bot API setMessageReaction requires Bot API 7.0+
-        warn!(
-            "Telegram unreact not yet supported in teloxide 0.12: {} on {}:{}",
-            emoji, message.chat_id, message.message_id
+    async fn unreact(&self, message: &MessageRef, _emoji: &str) -> Result<()> {
+        let chat_id = message
+            .chat_id
+            .parse::<i64>()
+            .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?;
+        let message_id = message
+            .message_id
+            .parse::<i32>()
+            .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?;
+
+        debug!(
+            "Removing Telegram reactions on {}:{}",
+            chat_id, message_id
         );
-        Ok(())
+
+        // To remove reactions, send an empty array
+        self.set_message_reaction(chat_id, message_id, vec![])
+            .await
     }
 
     async fn send_typing(&self, target: &MessageTarget) -> Result<()> {
@@ -609,5 +717,32 @@ mod tests {
         assert_eq!(caps.limits.text_max_length, 4096);
         assert!(caps.chat_types.contains(&ChatType::Direct));
         assert!(caps.chat_types.contains(&ChatType::Group));
+    }
+
+    #[test]
+    fn test_reaction_type_serialization() {
+        // Test emoji reaction
+        let emoji_reaction = ReactionType::emoji("👍");
+        let json = serde_json::to_string(&emoji_reaction).unwrap();
+        assert!(json.contains("\"type\":\"emoji\""));
+        assert!(json.contains("\"emoji\":\"👍\""));
+
+        // Test custom emoji reaction
+        let custom_reaction = ReactionType::custom_emoji("5368324170671202286");
+        let json = serde_json::to_string(&custom_reaction).unwrap();
+        assert!(json.contains("\"type\":\"custom_emoji\""));
+        assert!(json.contains("\"custom_emoji_id\":\"5368324170671202286\""));
+
+        // Test request serialization
+        let request = SetMessageReactionRequest {
+            chat_id: 123456789,
+            message_id: 42,
+            reaction: vec![ReactionType::emoji("❤️")],
+            is_big: Some(true),
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"chat_id\":123456789"));
+        assert!(json.contains("\"message_id\":42"));
+        assert!(json.contains("\"is_big\":true"));
     }
 }
