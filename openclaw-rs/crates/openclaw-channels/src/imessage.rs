@@ -1,8 +1,13 @@
 //! iMessage channel implementation.
 //!
 //! This channel integrates with Apple's iMessage on macOS.
-//! It uses AppleScript for sending messages and monitors the Messages
-//! database for incoming messages.
+//! It uses AppleScript for sending messages and reads incoming messages
+//! from the Messages SQLite database at `~/Library/Messages/chat.db`.
+//!
+//! **Requirements:**
+//! - macOS only
+//! - Full Disk Access permission (System Settings > Privacy & Security > Full Disk Access)
+//! - Messages app must be configured with an Apple ID or phone number
 
 #![cfg(feature = "imessage")]
 
@@ -20,6 +25,7 @@ use openclaw_core::types::{
     HealthStatus, InboundMessage, MediaAttachment, MediaCapabilities, MediaType, MessageId,
     MessageTarget, OutboundMessage, SenderInfo,
 };
+use rusqlite::{Connection, OpenFlags};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -351,6 +357,203 @@ impl IMessageChannel {
     }
 }
 
+/// Row data from the iMessage database query.
+#[derive(Debug)]
+struct MessageRow {
+    rowid: i64,
+    text: Option<String>,
+    handle_id: Option<String>,
+    is_from_me: bool,
+    date: i64,
+    chat_identifier: Option<String>,
+    attachment_filename: Option<String>,
+    attachment_mime_type: Option<String>,
+    attachment_path: Option<String>,
+}
+
+/// Query the iMessage database for new messages.
+fn query_new_messages(
+    db_path: &PathBuf,
+    last_rowid: i64,
+) -> std::result::Result<Vec<MessageRow>, rusqlite::Error> {
+    // Open database in read-only mode
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+
+    // Query for messages newer than last_rowid
+    // Joins: message -> handle (sender), chat_message_join -> chat, message_attachment_join -> attachment
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT
+            m.ROWID,
+            m.text,
+            h.id as handle_id,
+            m.is_from_me,
+            m.date,
+            c.chat_identifier,
+            a.filename as attachment_filename,
+            a.mime_type as attachment_mime_type,
+            a.filename as attachment_path
+        FROM message m
+        LEFT JOIN handle h ON m.handle_id = h.ROWID
+        LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+        LEFT JOIN chat c ON cmj.chat_id = c.ROWID
+        LEFT JOIN message_attachment_join maj ON m.ROWID = maj.message_id
+        LEFT JOIN attachment a ON maj.attachment_id = a.ROWID
+        WHERE m.ROWID > ?1
+        ORDER BY m.ROWID ASC
+        LIMIT 100
+        "#,
+    )?;
+
+    let rows = stmt.query_map([last_rowid], |row| {
+        Ok(MessageRow {
+            rowid: row.get(0)?,
+            text: row.get(1)?,
+            handle_id: row.get(2)?,
+            is_from_me: row.get::<_, i32>(3)? != 0,
+            date: row.get(4)?,
+            chat_identifier: row.get(5)?,
+            attachment_filename: row.get(6)?,
+            attachment_mime_type: row.get(7)?,
+            attachment_path: row.get(8)?,
+        })
+    })?;
+
+    let mut messages = Vec::new();
+    for row in rows {
+        match row {
+            Ok(msg) => messages.push(msg),
+            Err(e) => {
+                // Log but continue processing other messages
+                tracing::warn!("Failed to parse message row: {}", e);
+            }
+        }
+    }
+
+    Ok(messages)
+}
+
+/// Get the maximum ROWID from the database (for initialization).
+fn get_max_rowid(db_path: &PathBuf) -> std::result::Result<i64, rusqlite::Error> {
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    let max_rowid: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(ROWID), 0) FROM message",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(max_rowid)
+}
+
+/// Convert a MessageRow to InboundMessage.
+fn convert_row_to_inbound(
+    row: &MessageRow,
+    account_id: &str,
+) -> InboundMessage {
+    let sender = if row.is_from_me {
+        SenderInfo {
+            id: "me".to_string(),
+            username: None,
+            display_name: Some("Me".to_string()),
+            phone_number: None,
+            is_bot: false,
+        }
+    } else {
+        let handle = row.handle_id.clone().unwrap_or_default();
+        SenderInfo {
+            id: handle.clone(),
+            username: None,
+            display_name: None,
+            phone_number: if handle.starts_with('+') {
+                Some(handle)
+            } else {
+                None
+            },
+            is_bot: false,
+        }
+    };
+
+    let chat_id = row.chat_identifier.clone().unwrap_or_else(|| {
+        row.handle_id.clone().unwrap_or_else(|| format!("unknown_{}", row.rowid))
+    });
+
+    let chat = ChatInfo {
+        id: chat_id.clone(),
+        chat_type: if chat_id.contains(";-;") || chat_id.contains("chat") {
+            ChatType::Group
+        } else {
+            ChatType::Direct
+        },
+        title: None,
+        guild_id: None,
+    };
+
+    // Convert Apple's date format (nanoseconds since 2001-01-01) to DateTime<Utc>
+    // Apple's epoch is 978307200 seconds after Unix epoch
+    let apple_epoch_offset = 978307200i64;
+    let unix_timestamp = (row.date / 1_000_000_000) + apple_epoch_offset;
+    let timestamp = DateTime::<Utc>::from_timestamp(unix_timestamp, 0).unwrap_or_else(Utc::now);
+
+    // Build media attachments if present
+    let media = match (&row.attachment_filename, &row.attachment_mime_type) {
+        (Some(filename), Some(mime_type)) => {
+            let media_type = if mime_type.starts_with("image/") {
+                MediaType::Image
+            } else if mime_type.starts_with("video/") {
+                MediaType::Video
+            } else if mime_type.starts_with("audio/") {
+                MediaType::Audio
+            } else {
+                MediaType::Document
+            };
+
+            // Attachment path is relative to ~/Library/Messages/Attachments/
+            let attachment_url = row.attachment_path.as_ref().map(|p| {
+                if p.starts_with("~") {
+                    // Expand tilde
+                    dirs::home_dir()
+                        .map(|h| h.join(&p[2..]).to_string_lossy().to_string())
+                        .unwrap_or_else(|| p.clone())
+                } else if p.starts_with("/") {
+                    p.clone()
+                } else {
+                    // Relative path - prefix with Messages/Attachments
+                    dirs::home_dir()
+                        .map(|h| h.join("Library/Messages/Attachments").join(p).to_string_lossy().to_string())
+                        .unwrap_or_else(|| p.clone())
+                }
+            });
+
+            vec![MediaAttachment {
+                id: format!("att_{}", row.rowid),
+                media_type,
+                url: attachment_url,
+                data: None,
+                filename: Some(filename.clone()),
+                size_bytes: None,
+                mime_type: Some(mime_type.clone()),
+            }]
+        }
+        _ => vec![],
+    };
+
+    InboundMessage {
+        id: MessageId::new(row.rowid.to_string()),
+        timestamp,
+        channel: "imessage".to_string(),
+        account_id: account_id.to_string(),
+        sender,
+        chat,
+        text: row.text.clone().unwrap_or_default(),
+        media,
+        quote: None,
+        thread: None,
+        metadata: serde_json::json!({
+            "rowid": row.rowid,
+            "is_from_me": row.is_from_me,
+        }),
+    }
+}
+
 #[async_trait]
 impl Channel for IMessageChannel {
     fn channel_type(&self) -> &str {
@@ -508,6 +711,37 @@ impl ChannelReceiver for IMessageChannel {
             ));
         }
 
+        // Check database accessibility
+        if !self.database_path.exists() {
+            return Err(ChannelError::Config(format!(
+                "Messages database not found at {:?}. Make sure Messages app has been used.",
+                self.database_path
+            )));
+        }
+
+        // Initialize last_rowid to current max to only get new messages
+        let initial_rowid = match get_max_rowid(&self.database_path) {
+            Ok(rowid) => {
+                info!("iMessage database initialized at ROWID {}", rowid);
+                rowid
+            }
+            Err(e) => {
+                // Common error: permission denied - need Full Disk Access
+                if e.to_string().contains("unable to open") || e.to_string().contains("permission") {
+                    return Err(ChannelError::Config(
+                        "Cannot access Messages database. Please grant Full Disk Access permission \
+                         in System Settings > Privacy & Security > Full Disk Access".to_string()
+                    ));
+                }
+                return Err(ChannelError::channel("imessage", format!("Database error: {}", e)));
+            }
+        };
+
+        {
+            let mut last_rowid = self.last_rowid.write().await;
+            *last_rowid = initial_rowid;
+        }
+
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
 
         {
@@ -515,30 +749,15 @@ impl ChannelReceiver for IMessageChannel {
             *shutdown = Some(shutdown_tx);
         }
 
-        let _tx = self.message_tx.clone();
+        let tx = self.message_tx.clone();
         let db_path = self.database_path.clone();
         let connected = self.connected.clone();
-        let _last_rowid = self.last_rowid.clone();
-        let _instance_id = self.instance_id.clone();
-        let _account_id = self.account_id.clone();
+        let last_rowid = self.last_rowid.clone();
+        let handler = self.handler.clone();
+        let account_id = self.account_id.clone();
 
         tokio::spawn(async move {
-            info!("Starting iMessage receive loop");
-
-            // Note: This would poll the chat.db SQLite database for new messages
-            // The database is at ~/Library/Messages/chat.db
-            //
-            // Example query:
-            // SELECT m.ROWID, m.text, h.id as handle, m.is_from_me, m.date,
-            //        c.chat_identifier, a.filename, a.mime_type
-            // FROM message m
-            // LEFT JOIN handle h ON m.handle_id = h.ROWID
-            // LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
-            // LEFT JOIN chat c ON cmj.chat_id = c.ROWID
-            // LEFT JOIN message_attachment_join maj ON m.ROWID = maj.message_id
-            // LEFT JOIN attachment a ON maj.attachment_id = a.ROWID
-            // WHERE m.ROWID > ?
-            // ORDER BY m.ROWID ASC
+            info!("Starting iMessage receive loop - polling {:?}", db_path);
 
             loop {
                 tokio::select! {
@@ -546,16 +765,79 @@ impl ChannelReceiver for IMessageChannel {
                         info!("iMessage receive loop shutting down");
                         break;
                     }
-                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(2)) => {
+                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(500)) => {
                         let is_connected = *connected.read().await;
                         if !is_connected {
                             debug!("iMessage not connected, skipping poll");
                             continue;
                         }
 
-                        // Would query database here for new messages
-                        // and send them to tx channel
-                        debug!("Would poll chat.db at {:?}", db_path);
+                        // Get current last_rowid
+                        let current_rowid = *last_rowid.read().await;
+
+                        // Query for new messages (run in blocking task since rusqlite is sync)
+                        let db_path_clone = db_path.clone();
+                        let query_result = tokio::task::spawn_blocking(move || {
+                            query_new_messages(&db_path_clone, current_rowid)
+                        }).await;
+
+                        match query_result {
+                            Ok(Ok(messages)) => {
+                                if !messages.is_empty() {
+                                    debug!("Found {} new iMessage(s)", messages.len());
+
+                                    let mut max_rowid = current_rowid;
+
+                                    for row in messages {
+                                        // Skip messages from self unless configured otherwise
+                                        if row.is_from_me {
+                                            max_rowid = max_rowid.max(row.rowid);
+                                            continue;
+                                        }
+
+                                        // Convert to InboundMessage
+                                        let inbound = convert_row_to_inbound(&row, &account_id);
+
+                                        debug!(
+                                            "Received iMessage from {}: {}",
+                                            inbound.sender.id,
+                                            inbound.text.chars().take(50).collect::<String>()
+                                        );
+
+                                        // Call handler if set
+                                        {
+                                            let handler_guard = handler.read().await;
+                                            if let Some(ref h) = *handler_guard {
+                                                if let Err(e) = h.handle(inbound.clone()).await {
+                                                    warn!("Message handler error: {}", e);
+                                                }
+                                            }
+                                        }
+
+                                        // Send to channel
+                                        if let Err(e) = tx.send(inbound).await {
+                                            warn!("Failed to send message to channel: {}", e);
+                                        }
+
+                                        max_rowid = max_rowid.max(row.rowid);
+                                    }
+
+                                    // Update last_rowid
+                                    if max_rowid > current_rowid {
+                                        let mut rowid = last_rowid.write().await;
+                                        *rowid = max_rowid;
+                                    }
+                                }
+                            }
+                            Ok(Err(e)) => {
+                                // Database query error - log but continue
+                                warn!("iMessage database query error: {}", e);
+                            }
+                            Err(e) => {
+                                // Task join error
+                                error!("iMessage query task failed: {}", e);
+                            }
+                        }
                     }
                 }
             }
@@ -619,9 +901,37 @@ impl ChannelLifecycle for IMessageChannel {
         // Check if Messages database exists
         if !self.database_path.exists() {
             return Err(ChannelError::Config(format!(
-                "Messages database not found at {:?}",
+                "Messages database not found at {:?}. \
+                 Make sure Messages app has been used at least once.",
                 self.database_path
             )));
+        }
+
+        // Verify we can actually read the database (requires Full Disk Access)
+        let db_path = self.database_path.clone();
+        let access_check = tokio::task::spawn_blocking(move || {
+            get_max_rowid(&db_path)
+        }).await;
+
+        match access_check {
+            Ok(Ok(rowid)) => {
+                info!("iMessage database accessible, current ROWID: {}", rowid);
+            }
+            Ok(Err(e)) => {
+                let err_str = e.to_string();
+                if err_str.contains("unable to open") || err_str.contains("permission") || err_str.contains("readonly") {
+                    return Err(ChannelError::Config(
+                        "Cannot access Messages database. Please grant Full Disk Access:\n\
+                         1. Open System Settings\n\
+                         2. Go to Privacy & Security > Full Disk Access\n\
+                         3. Add your terminal app or the application running this code".to_string()
+                    ));
+                }
+                return Err(ChannelError::channel("imessage", format!("Database error: {}", e)));
+            }
+            Err(e) => {
+                return Err(ChannelError::Internal(format!("Task error: {}", e)));
+            }
         }
 
         // Check if Messages app is available
@@ -635,14 +945,14 @@ impl ChannelLifecycle for IMessageChannel {
 
             match output {
                 Ok(o) if o.status.success() => {
-                    info!("iMessage connection verified");
+                    debug!("Messages app check completed");
                 }
                 Ok(o) => {
                     let stderr = String::from_utf8_lossy(&o.stderr);
                     warn!("iMessage check warning: {}", stderr);
                 }
                 Err(e) => {
-                    error!("Failed to check Messages app: {}", e);
+                    warn!("Failed to check Messages app: {}", e);
                 }
             }
         }
@@ -650,7 +960,7 @@ impl ChannelLifecycle for IMessageChannel {
         let mut connected = self.connected.write().await;
         *connected = true;
 
-        info!("Connected to iMessage");
+        info!("Connected to iMessage (database: {:?})", self.database_path);
         Ok(())
     }
 
@@ -781,5 +1091,68 @@ mod tests {
         assert!(result);
         #[cfg(not(target_os = "macos"))]
         assert!(!result);
+    }
+
+    #[test]
+    fn test_convert_row_to_inbound() {
+        // Test incoming message conversion
+        let row = MessageRow {
+            rowid: 12345,
+            text: Some("Hello from iMessage!".to_string()),
+            handle_id: Some("+15551234567".to_string()),
+            is_from_me: false,
+            date: 700000000000000000, // ~2023 in Apple's date format
+            chat_identifier: Some("iMessage;-;+15551234567".to_string()),
+            attachment_filename: None,
+            attachment_mime_type: None,
+            attachment_path: None,
+        };
+
+        let inbound = convert_row_to_inbound(&row, "test_account");
+
+        assert_eq!(inbound.id.as_str(), "12345");
+        assert_eq!(inbound.text, "Hello from iMessage!");
+        assert_eq!(inbound.sender.id, "+15551234567");
+        assert_eq!(inbound.sender.phone_number, Some("+15551234567".to_string()));
+        assert!(!inbound.sender.is_bot);
+        assert_eq!(inbound.chat.id, "iMessage;-;+15551234567");
+        assert_eq!(inbound.channel, "imessage");
+        assert!(inbound.media.is_empty());
+
+        // Test message from self
+        let from_me_row = MessageRow {
+            rowid: 12346,
+            text: Some("My reply".to_string()),
+            handle_id: Some("+15551234567".to_string()),
+            is_from_me: true,
+            date: 700000000000000000,
+            chat_identifier: Some("iMessage;-;+15551234567".to_string()),
+            attachment_filename: None,
+            attachment_mime_type: None,
+            attachment_path: None,
+        };
+
+        let from_me_inbound = convert_row_to_inbound(&from_me_row, "test_account");
+        assert_eq!(from_me_inbound.sender.id, "me");
+        assert_eq!(from_me_inbound.sender.display_name, Some("Me".to_string()));
+
+        // Test message with attachment
+        let with_attachment = MessageRow {
+            rowid: 12347,
+            text: None,
+            handle_id: Some("+15559876543".to_string()),
+            is_from_me: false,
+            date: 700000000000000000,
+            chat_identifier: Some("+15559876543".to_string()),
+            attachment_filename: Some("photo.heic".to_string()),
+            attachment_mime_type: Some("image/heic".to_string()),
+            attachment_path: Some("~/Library/Messages/Attachments/ab/12/photo.heic".to_string()),
+        };
+
+        let attachment_inbound = convert_row_to_inbound(&with_attachment, "test_account");
+        assert_eq!(attachment_inbound.media.len(), 1);
+        assert_eq!(attachment_inbound.media[0].filename, Some("photo.heic".to_string()));
+        assert_eq!(attachment_inbound.media[0].mime_type, Some("image/heic".to_string()));
+        assert!(matches!(attachment_inbound.media[0].media_type, MediaType::Image));
     }
 }
