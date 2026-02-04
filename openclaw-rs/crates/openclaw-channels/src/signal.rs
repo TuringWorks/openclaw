@@ -14,7 +14,7 @@ use crate::attachment::Attachment;
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -556,19 +556,19 @@ impl ChannelSender for SignalChannel {
         Ok(SendResult::new(timestamp.to_string()))
     }
 
-    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
+    async fn edit(&self, _message: &MessageRef, _new_content: &str) -> Result<()> {
         // Signal doesn't expose edit via signal-cli yet
         warn!("Signal edit not supported via signal-cli");
         Ok(())
     }
 
-    async fn delete(&self, _message_id: &str) -> Result<()> {
+    async fn delete(&self, _message: &MessageRef) -> Result<()> {
         // Signal doesn't expose delete via signal-cli yet
         warn!("Signal delete not supported via signal-cli");
         Ok(())
     }
 
-    async fn react(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
         let connected = *self.connected.read().await;
         if !connected {
             return Err(ChannelError::Internal("Not connected to Signal".to_string()));
@@ -576,15 +576,15 @@ impl ChannelSender for SignalChannel {
 
         // signal-cli sendReaction -a ACCOUNT -e EMOJI -t TARGET_AUTHOR -T TARGET_TIMESTAMP RECIPIENT
         debug!(
-            "Would react with {} to message {}",
-            emoji, message_id
+            "Would react with {} to message {} in chat {}",
+            emoji, message.message_id, message.chat_id
         );
         warn!("Signal react requires target author - not fully implemented");
 
         Ok(())
     }
 
-    async fn unreact(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()> {
         let connected = *self.connected.read().await;
         if !connected {
             return Err(ChannelError::Internal("Not connected to Signal".to_string()));
@@ -592,8 +592,8 @@ impl ChannelSender for SignalChannel {
 
         // signal-cli sendReaction -a ACCOUNT -e EMOJI -t TARGET_AUTHOR -T TARGET_TIMESTAMP --remove RECIPIENT
         debug!(
-            "Would remove reaction {} from message {}",
-            emoji, message_id
+            "Would remove reaction {} from message {} in chat {}",
+            emoji, message.message_id, message.chat_id
         );
         warn!("Signal unreact requires target author - not fully implemented");
 

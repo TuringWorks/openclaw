@@ -13,7 +13,7 @@ use crate::attachment::Attachment;
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -572,23 +572,107 @@ impl ChannelSender for SlackChannel {
         Ok(SendResult::new(String::new()))
     }
 
-    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
-        warn!("Edit requires channel_id context for Slack - not yet implemented");
+    async fn edit(&self, message: &MessageRef, new_content: &str) -> Result<()> {
+        let client_guard = self.client.read().await;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let token = self.get_token();
+        let session = client.open_session(&token);
+
+        let channel_id = SlackChannelId::new(message.chat_id.clone());
+        let ts = SlackTs::new(message.message_id.clone());
+
+        let request = SlackApiChatUpdateRequest::new(
+            channel_id,
+            SlackMessageContent::new().with_text(new_content.to_string()),
+            ts,
+        );
+
+        session
+            .chat_update(&request)
+            .await
+            .map_err(|e| ChannelError::channel("slack", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn delete(&self, _message_id: &str) -> Result<()> {
-        warn!("Delete requires channel_id context for Slack - not yet implemented");
+    async fn delete(&self, message: &MessageRef) -> Result<()> {
+        let client_guard = self.client.read().await;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let token = self.get_token();
+        let session = client.open_session(&token);
+
+        let channel_id = SlackChannelId::new(message.chat_id.clone());
+        let ts = SlackTs::new(message.message_id.clone());
+
+        let request = SlackApiChatDeleteRequest::new(channel_id, ts);
+
+        session
+            .chat_delete(&request)
+            .await
+            .map_err(|e| ChannelError::channel("slack", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn react(&self, _message_id: &str, _emoji: &str) -> Result<()> {
-        warn!("React requires channel_id context for Slack - not yet implemented");
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
+        let client_guard = self.client.read().await;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let token = self.get_token();
+        let session = client.open_session(&token);
+
+        let channel_id = SlackChannelId::new(message.chat_id.clone());
+        let ts = SlackTs::new(message.message_id.clone());
+
+        // Remove surrounding colons from emoji name if present (e.g., ":thumbsup:" -> "thumbsup")
+        let emoji_name = emoji.trim_matches(':');
+
+        let request = SlackApiReactionsAddRequest::new(
+            channel_id,
+            SlackReactionName::new(emoji_name.to_string()),
+            ts,
+        );
+
+        session
+            .reactions_add(&request)
+            .await
+            .map_err(|e| ChannelError::channel("slack", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn unreact(&self, _message_id: &str, _emoji: &str) -> Result<()> {
-        warn!("Unreact requires channel_id context for Slack - not yet implemented");
+    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()> {
+        let client_guard = self.client.read().await;
+        let client = client_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let token = self.get_token();
+        let session = client.open_session(&token);
+
+        let channel_id = SlackChannelId::new(message.chat_id.clone());
+        let ts = SlackTs::new(message.message_id.clone());
+
+        let emoji_name = emoji.trim_matches(':');
+
+        // SlackApiReactionsRemoveRequest uses builder pattern with optional channel/timestamp
+        let request = SlackApiReactionsRemoveRequest::new(SlackReactionName::new(emoji_name.to_string()))
+            .with_channel(channel_id)
+            .with_timestamp(ts);
+
+        session
+            .reactions_remove(&request)
+            .await
+            .map_err(|e| ChannelError::channel("slack", e.to_string()))?;
+
         Ok(())
     }
 

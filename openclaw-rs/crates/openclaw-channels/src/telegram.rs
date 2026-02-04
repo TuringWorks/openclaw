@@ -6,7 +6,7 @@ use crate::attachment::{Attachment, AttachmentType};
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -363,24 +363,66 @@ impl ChannelSender for TelegramChannel {
         Ok(SendResult::new(last_msg_id.unwrap_or_default()))
     }
 
-    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
-        // Would need chat_id stored somewhere
-        warn!("Edit not fully implemented - need chat_id context");
+    async fn edit(&self, message: &MessageRef, new_content: &str) -> Result<()> {
+        let chat_id = ChatId(
+            message
+                .chat_id
+                .parse::<i64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+        let message_id = teloxide::types::MessageId(
+            message
+                .message_id
+                .parse::<i32>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+
+        self.bot
+            .edit_message_text(chat_id, message_id, new_content)
+            .await
+            .map_err(|e| ChannelError::channel("telegram", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn delete(&self, _message_id: &str) -> Result<()> {
-        warn!("Delete not fully implemented - need chat_id context");
+    async fn delete(&self, message: &MessageRef) -> Result<()> {
+        let chat_id = ChatId(
+            message
+                .chat_id
+                .parse::<i64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+        let message_id = teloxide::types::MessageId(
+            message
+                .message_id
+                .parse::<i32>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+
+        self.bot
+            .delete_message(chat_id, message_id)
+            .await
+            .map_err(|e| ChannelError::channel("telegram", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn react(&self, _message_id: &str, _emoji: &str) -> Result<()> {
-        warn!("React not implemented for Telegram");
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
+        // Telegram Bot API setMessageReaction requires Bot API 7.0+
+        // teloxide 0.12 doesn't expose this yet - needs raw API call
+        warn!(
+            "Telegram reactions not yet supported in teloxide 0.12: {} on {}:{}",
+            emoji, message.chat_id, message.message_id
+        );
         Ok(())
     }
 
-    async fn unreact(&self, _message_id: &str, _emoji: &str) -> Result<()> {
-        warn!("Unreact not implemented for Telegram");
+    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()> {
+        // Telegram Bot API setMessageReaction requires Bot API 7.0+
+        warn!(
+            "Telegram unreact not yet supported in teloxide 0.12: {} on {}:{}",
+            emoji, message.chat_id, message.message_id
+        );
         Ok(())
     }
 

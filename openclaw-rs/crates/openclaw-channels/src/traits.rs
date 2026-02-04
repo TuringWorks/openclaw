@@ -75,16 +75,20 @@ pub trait ChannelSender: Send + Sync {
     ) -> Result<SendResult>;
 
     /// Edit a previously sent message.
-    async fn edit(&self, message_id: &str, new_content: &str) -> Result<()>;
+    /// Requires a MessageRef which includes both message_id and chat_id.
+    async fn edit(&self, message: &MessageRef, new_content: &str) -> Result<()>;
 
     /// Delete a previously sent message.
-    async fn delete(&self, message_id: &str) -> Result<()>;
+    /// Requires a MessageRef which includes both message_id and chat_id.
+    async fn delete(&self, message: &MessageRef) -> Result<()>;
 
     /// Add a reaction to a message.
-    async fn react(&self, message_id: &str, emoji: &str) -> Result<()>;
+    /// Requires a MessageRef which includes both message_id and chat_id.
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()>;
 
     /// Remove a reaction from a message.
-    async fn unreact(&self, message_id: &str, emoji: &str) -> Result<()>;
+    /// Requires a MessageRef which includes both message_id and chat_id.
+    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()>;
 
     /// Send a typing indicator.
     async fn send_typing(&self, target: &MessageTarget) -> Result<()>;
@@ -95,11 +99,52 @@ pub trait ChannelSender: Send + Sync {
     }
 }
 
+/// Reference to a specific message in a channel.
+/// Used for operations that need to identify a message (edit, delete, react).
+#[derive(Debug, Clone)]
+pub struct MessageRef {
+    /// The message ID.
+    pub message_id: String,
+
+    /// The chat/channel ID where the message exists.
+    pub chat_id: String,
+
+    /// Optional thread ID if the message is in a thread.
+    pub thread_id: Option<String>,
+}
+
+impl MessageRef {
+    /// Create a new message reference.
+    pub fn new(message_id: impl Into<String>, chat_id: impl Into<String>) -> Self {
+        Self {
+            message_id: message_id.into(),
+            chat_id: chat_id.into(),
+            thread_id: None,
+        }
+    }
+
+    /// Create a message reference in a thread.
+    pub fn in_thread(
+        message_id: impl Into<String>,
+        chat_id: impl Into<String>,
+        thread_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            message_id: message_id.into(),
+            chat_id: chat_id.into(),
+            thread_id: Some(thread_id.into()),
+        }
+    }
+}
+
 /// Result from sending a message.
 #[derive(Debug, Clone)]
 pub struct SendResult {
     /// Message ID assigned by the channel.
     pub message_id: String,
+
+    /// Chat/channel ID where the message was sent.
+    pub chat_id: String,
 
     /// Timestamp when the message was sent.
     pub timestamp: chrono::DateTime<chrono::Utc>,
@@ -116,6 +161,18 @@ impl SendResult {
     pub fn new(message_id: impl Into<String>) -> Self {
         Self {
             message_id: message_id.into(),
+            chat_id: String::new(),
+            timestamp: chrono::Utc::now(),
+            delivered: true,
+            metadata: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Create a new send result with chat ID.
+    pub fn with_chat(message_id: impl Into<String>, chat_id: impl Into<String>) -> Self {
+        Self {
+            message_id: message_id.into(),
+            chat_id: chat_id.into(),
             timestamp: chrono::Utc::now(),
             delivered: true,
             metadata: std::collections::HashMap::new(),
@@ -132,6 +189,11 @@ impl SendResult {
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
+    }
+
+    /// Convert to a MessageRef for subsequent operations.
+    pub fn as_ref(&self) -> MessageRef {
+        MessageRef::new(&self.message_id, &self.chat_id)
     }
 }
 
@@ -247,12 +309,29 @@ mod tests {
 
     #[test]
     fn test_send_result() {
-        let result = SendResult::new("msg123")
-            .with_metadata("thread_id", serde_json::json!("thread456"));
+        let result = SendResult::with_chat("msg123", "chat456")
+            .with_metadata("thread_id", serde_json::json!("thread789"));
 
         assert_eq!(result.message_id, "msg123");
+        assert_eq!(result.chat_id, "chat456");
         assert!(result.delivered);
         assert!(result.metadata.contains_key("thread_id"));
+
+        // Test conversion to MessageRef
+        let msg_ref = result.as_ref();
+        assert_eq!(msg_ref.message_id, "msg123");
+        assert_eq!(msg_ref.chat_id, "chat456");
+    }
+
+    #[test]
+    fn test_message_ref() {
+        let msg_ref = MessageRef::new("msg123", "chat456");
+        assert_eq!(msg_ref.message_id, "msg123");
+        assert_eq!(msg_ref.chat_id, "chat456");
+        assert!(msg_ref.thread_id.is_none());
+
+        let thread_ref = MessageRef::in_thread("msg123", "chat456", "thread789");
+        assert_eq!(thread_ref.thread_id, Some("thread789".to_string()));
     }
 
     #[test]

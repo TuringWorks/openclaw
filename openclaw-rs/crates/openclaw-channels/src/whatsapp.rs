@@ -9,7 +9,7 @@ use crate::attachment::Attachment;
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -861,7 +861,7 @@ impl ChannelSender for WhatsAppChannel {
         Ok(SendResult::new(last_msg_id))
     }
 
-    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
+    async fn edit(&self, _message: &MessageRef, _new_content: &str) -> Result<()> {
         // WhatsApp doesn't support message editing
         warn!("WhatsApp does not support message editing");
         Err(ChannelError::Internal(
@@ -869,7 +869,7 @@ impl ChannelSender for WhatsAppChannel {
         ))
     }
 
-    async fn delete(&self, _message_id: &str) -> Result<()> {
+    async fn delete(&self, _message: &MessageRef) -> Result<()> {
         // WhatsApp doesn't support message deletion via API
         warn!("WhatsApp does not support message deletion via API");
         Err(ChannelError::Internal(
@@ -877,50 +877,74 @@ impl ChannelSender for WhatsAppChannel {
         ))
     }
 
-    async fn react(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
         let connected = *self.connected.read().await;
         if !connected {
             return Err(ChannelError::Internal("Not connected to WhatsApp".to_string()));
         }
 
-        // WhatsApp reaction payload
+        // WhatsApp reaction payload - now we have recipient from MessageRef
         let payload = serde_json::json!({
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
-            "to": "", // Would need recipient from context
+            "to": message.chat_id,
             "type": "reaction",
             "reaction": {
-                "message_id": message_id,
+                "message_id": message.message_id,
                 "emoji": emoji
             }
         });
 
-        warn!("WhatsApp react requires recipient context - not fully implemented");
-        debug!("Would send reaction: {:?}", payload);
+        let url = format!(
+            "https://graph.facebook.com/v18.0/{}/messages",
+            self.phone_number_id
+        );
+
+        self.client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| ChannelError::channel("whatsapp", e.to_string()))?
+            .error_for_status()
+            .map_err(|e| ChannelError::channel("whatsapp", e.to_string()))?;
 
         Ok(())
     }
 
-    async fn unreact(&self, message_id: &str, _emoji: &str) -> Result<()> {
-        // To remove reaction, send empty emoji
+    async fn unreact(&self, message: &MessageRef, _emoji: &str) -> Result<()> {
         let connected = *self.connected.read().await;
         if !connected {
             return Err(ChannelError::Internal("Not connected to WhatsApp".to_string()));
         }
 
+        // To remove reaction, send empty emoji
         let payload = serde_json::json!({
             "messaging_product": "whatsapp",
             "recipient_type": "individual",
-            "to": "",
+            "to": message.chat_id,
             "type": "reaction",
             "reaction": {
-                "message_id": message_id,
+                "message_id": message.message_id,
                 "emoji": ""
             }
         });
 
-        warn!("WhatsApp unreact requires recipient context - not fully implemented");
-        debug!("Would send unreact: {:?}", payload);
+        let url = format!(
+            "https://graph.facebook.com/v18.0/{}/messages",
+            self.phone_number_id
+        );
+
+        self.client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| ChannelError::channel("whatsapp", e.to_string()))?
+            .error_for_status()
+            .map_err(|e| ChannelError::channel("whatsapp", e.to_string()))?;
 
         Ok(())
     }

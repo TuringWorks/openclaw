@@ -33,7 +33,7 @@ pub mod imessage;
 pub mod whatsapp;
 
 pub use error::ChannelError;
-pub use traits::{Channel, ChannelReceiver, ChannelSender, ChannelLifecycle};
+pub use traits::{Channel, ChannelReceiver, ChannelSender, ChannelLifecycle, MessageRef, SendResult};
 pub use routing::{Router, RouteMatch, RouteRule};
 pub use delivery::{DeliveryQueue, DeliveryStatus, DeliveryResult};
 pub use attachment::{Attachment, AttachmentType};

@@ -6,7 +6,7 @@ use crate::attachment::Attachment;
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -350,23 +350,114 @@ impl ChannelSender for DiscordChannel {
         Ok(SendResult::new(sent.id.to_string()))
     }
 
-    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
-        warn!("Edit requires channel_id context - storing for future implementation");
+    async fn edit(&self, message: &MessageRef, new_content: &str) -> Result<()> {
+        let http_guard = self.http.read().await;
+        let http = http_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let channel_id = ChannelId::new(
+            message
+                .chat_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+        let message_id = serenity::all::MessageId::new(
+            message
+                .message_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+
+        channel_id
+            .edit_message(http, message_id, serenity::all::EditMessage::new().content(new_content))
+            .await
+            .map_err(|e| ChannelError::channel("discord", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn delete(&self, _message_id: &str) -> Result<()> {
-        warn!("Delete requires channel_id context - storing for future implementation");
+    async fn delete(&self, message: &MessageRef) -> Result<()> {
+        let http_guard = self.http.read().await;
+        let http = http_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let channel_id = ChannelId::new(
+            message
+                .chat_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+        let message_id = serenity::all::MessageId::new(
+            message
+                .message_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+
+        channel_id
+            .delete_message(http, message_id)
+            .await
+            .map_err(|e| ChannelError::channel("discord", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn react(&self, _message_id: &str, _emoji: &str) -> Result<()> {
-        warn!("React requires channel_id context - storing for future implementation");
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
+        let http_guard = self.http.read().await;
+        let http = http_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let channel_id = ChannelId::new(
+            message
+                .chat_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+        let message_id = serenity::all::MessageId::new(
+            message
+                .message_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+
+        // Parse emoji - could be unicode or custom emoji format
+        let reaction = serenity::all::ReactionType::Unicode(emoji.to_string());
+
+        http.create_reaction(channel_id, message_id, &reaction)
+            .await
+            .map_err(|e| ChannelError::channel("discord", e.to_string()))?;
+
         Ok(())
     }
 
-    async fn unreact(&self, _message_id: &str, _emoji: &str) -> Result<()> {
-        warn!("Unreact requires channel_id context - storing for future implementation");
+    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()> {
+        let http_guard = self.http.read().await;
+        let http = http_guard
+            .as_ref()
+            .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
+
+        let channel_id = ChannelId::new(
+            message
+                .chat_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+        let message_id = serenity::all::MessageId::new(
+            message
+                .message_id
+                .parse::<u64>()
+                .map_err(|e| ChannelError::InvalidMessage(e.to_string()))?,
+        );
+
+        let reaction = serenity::all::ReactionType::Unicode(emoji.to_string());
+
+        http.delete_reaction_me(channel_id, message_id, &reaction)
+            .await
+            .map_err(|e| ChannelError::channel("discord", e.to_string()))?;
+
         Ok(())
     }
 

@@ -6,7 +6,7 @@ use crate::attachment::Attachment;
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -188,10 +188,11 @@ impl ChannelSender for WebChannel {
         self.send(message).await
     }
 
-    async fn edit(&self, message_id: &str, new_content: &str) -> Result<()> {
+    async fn edit(&self, message: &MessageRef, new_content: &str) -> Result<()> {
         let payload = serde_json::json!({
             "type": "edit",
-            "message_id": message_id,
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
             "text": new_content,
             "timestamp": Utc::now().to_rfc3339(),
         });
@@ -203,10 +204,11 @@ impl ChannelSender for WebChannel {
         Ok(())
     }
 
-    async fn delete(&self, message_id: &str) -> Result<()> {
+    async fn delete(&self, message: &MessageRef) -> Result<()> {
         let payload = serde_json::json!({
             "type": "delete",
-            "message_id": message_id,
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
             "timestamp": Utc::now().to_rfc3339(),
         });
 
@@ -217,10 +219,11 @@ impl ChannelSender for WebChannel {
         Ok(())
     }
 
-    async fn react(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn react(&self, message: &MessageRef, emoji: &str) -> Result<()> {
         let payload = serde_json::json!({
             "type": "react",
-            "message_id": message_id,
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
             "emoji": emoji,
             "timestamp": Utc::now().to_rfc3339(),
         });
@@ -232,10 +235,11 @@ impl ChannelSender for WebChannel {
         Ok(())
     }
 
-    async fn unreact(&self, message_id: &str, emoji: &str) -> Result<()> {
+    async fn unreact(&self, message: &MessageRef, emoji: &str) -> Result<()> {
         let payload = serde_json::json!({
             "type": "unreact",
-            "message_id": message_id,
+            "chat_id": message.chat_id,
+            "message_id": message.message_id,
             "emoji": emoji,
             "timestamp": Utc::now().to_rfc3339(),
         });

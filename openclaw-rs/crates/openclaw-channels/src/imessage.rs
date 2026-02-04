@@ -10,7 +10,7 @@ use crate::attachment::Attachment;
 use crate::error::ChannelError;
 use crate::traits::{
     Channel, ChannelConfig, ChannelLifecycle, ChannelReceiver, ChannelSender, MessageHandler,
-    SendResult,
+    MessageRef, SendResult,
 };
 use crate::Result;
 use async_trait::async_trait;
@@ -465,25 +465,25 @@ impl ChannelSender for IMessageChannel {
         Ok(SendResult::new(msg_id))
     }
 
-    async fn edit(&self, _message_id: &str, _new_content: &str) -> Result<()> {
+    async fn edit(&self, _message: &MessageRef, _new_content: &str) -> Result<()> {
         // iMessage supports editing (iOS 16+) but not via AppleScript
         warn!("iMessage edit not supported via AppleScript");
         Ok(())
     }
 
-    async fn delete(&self, _message_id: &str) -> Result<()> {
+    async fn delete(&self, _message: &MessageRef) -> Result<()> {
         // iMessage supports unsend (iOS 16+) but not via AppleScript
         warn!("iMessage delete/unsend not supported via AppleScript");
         Ok(())
     }
 
-    async fn react(&self, _message_id: &str, _emoji: &str) -> Result<()> {
+    async fn react(&self, _message: &MessageRef, _emoji: &str) -> Result<()> {
         // Tapback reactions exist but aren't accessible via AppleScript
         warn!("iMessage reactions (Tapback) not supported via AppleScript");
         Ok(())
     }
 
-    async fn unreact(&self, _message_id: &str, _emoji: &str) -> Result<()> {
+    async fn unreact(&self, _message: &MessageRef, _emoji: &str) -> Result<()> {
         warn!("iMessage unreact not supported via AppleScript");
         Ok(())
     }
