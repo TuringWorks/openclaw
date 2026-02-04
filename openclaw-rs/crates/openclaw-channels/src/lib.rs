@@ -32,6 +32,9 @@ pub mod imessage;
 #[cfg(feature = "whatsapp")]
 pub mod whatsapp;
 
+#[cfg(feature = "line")]
+pub mod line;
+
 pub use error::ChannelError;
 pub use traits::{Channel, ChannelReceiver, ChannelSender, ChannelLifecycle, MessageRef, SendResult};
 pub use routing::{Router, RouteMatch, RouteRule};

@@ -58,6 +58,7 @@ web = []
 signal = []
 imessage = []
 whatsapp = []
+line = ["dep:hmac", "dep:sha2", "dep:base64"]
 
 [dependencies.teloxide]
 version = "0.12"
@@ -76,3 +77,16 @@ version = "2.2"
 optional = true
 default-features = false
 features = ["hyper"]
+
+# LINE channel dependencies
+[dependencies.hmac]
+version = "0.12"
+optional = true
+
+[dependencies.sha2]
+version = "0.10"
+optional = true
+
+[dependencies.base64]
+version = "0.22"
+optional = true
