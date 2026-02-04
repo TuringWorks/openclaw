@@ -54,7 +54,7 @@ default = []
 telegram = ["dep:teloxide"]
 discord = ["dep:serenity"]
 slack = ["dep:slack-morphism"]
-web = []
+web = ["dep:tokio-tungstenite"]
 signal = []
 imessage = []
 whatsapp = []
@@ -89,4 +89,9 @@ optional = true
 
 [dependencies.base64]
 version = "0.22"
+optional = true
+
+# Web channel dependencies
+[dependencies.tokio-tungstenite]
+version = "0.21"
 optional = true

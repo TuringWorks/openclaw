@@ -24,6 +24,10 @@ use openclaw_core::types::{
     MessageTarget, OutboundMessage, QuotedMessage, SenderInfo,
 };
 use slack_morphism::prelude::*;
+use slack_morphism::api::{
+    SlackApiFilesGetUploadUrlExternalRequest, SlackApiFilesUploadViaUrlRequest,
+    SlackApiFilesCompleteUploadExternalRequest, SlackApiFilesComplete,
+};
 use slack_morphism::hyper_tokio::{SlackClientHyperHttpsConnector, SlackHyperClient};
 use slack_morphism::listener::SlackClientEventsUserState;
 use slack_morphism::socket_mode::{
@@ -544,27 +548,102 @@ impl ChannelSender for SlackChannel {
             .as_ref()
             .ok_or_else(|| ChannelError::Internal("Not connected".to_string()))?;
 
-        let _channel_id = SlackChannelId::new(message.target.chat_id.clone());
+        let channel_id = SlackChannelId::new(message.target.chat_id.clone());
         let token = self.get_token();
-        let _session = client.open_session(&token);
+        let session = client.open_session(&token);
 
-        // Upload files first
+        // Track uploaded file IDs for the complete upload request
+        let mut uploaded_files: Vec<SlackApiFilesComplete> = Vec::new();
+
+        // Upload files using the new Slack file upload flow
         for attachment in &attachments {
-            match &attachment.source {
-                crate::attachment::AttachmentSource::Bytes(_bytes) => {
-                    // Note: slack-morphism file upload API would be used here
-                    warn!("File upload from bytes not yet implemented for Slack");
+            let (content, filename, content_type) = match &attachment.source {
+                crate::attachment::AttachmentSource::Bytes(bytes) => {
+                    let filename = attachment.filename.clone();
+                    let content_type = attachment.mime_type.clone();
+                    (bytes.to_vec(), filename, content_type)
                 }
-                crate::attachment::AttachmentSource::Path(_path) => {
-                    warn!("File upload from path not yet implemented for Slack");
+                crate::attachment::AttachmentSource::Path(path) => {
+                    let content = tokio::fs::read(path)
+                        .await
+                        .map_err(|e| ChannelError::channel("slack", format!("Failed to read file: {}", e)))?;
+                    let filename = attachment.filename.clone();
+                    let content_type = attachment.mime_type.clone();
+                    (content, filename, content_type)
                 }
-                _ => {
-                    warn!("Unsupported attachment source for Slack");
+                crate::attachment::AttachmentSource::Url(url) => {
+                    // Download URL content first
+                    let response = reqwest::get(url.as_str())
+                        .await
+                        .map_err(|e| ChannelError::channel("slack", format!("Failed to fetch URL: {}", e)))?;
+                    let content = response.bytes()
+                        .await
+                        .map_err(|e| ChannelError::channel("slack", format!("Failed to read URL content: {}", e)))?
+                        .to_vec();
+                    let filename = attachment.filename.clone();
+                    let content_type = attachment.mime_type.clone();
+                    (content, filename, content_type)
                 }
+                crate::attachment::AttachmentSource::FileId(file_id) => {
+                    // Cannot upload a file ID - skip with warning
+                    warn!("Cannot re-upload file from file ID '{}' - skipping", file_id);
+                    continue;
+                }
+            };
+
+            // Step 1: Get upload URL
+            let upload_url_req = SlackApiFilesGetUploadUrlExternalRequest::new(
+                filename.clone(),
+                content.len(),
+            );
+            let upload_url_resp = session
+                .get_upload_url_external(&upload_url_req)
+                .await
+                .map_err(|e| ChannelError::channel("slack", format!("Failed to get upload URL: {}", e)))?;
+
+            debug!("Got upload URL for file '{}': file_id={}", filename, upload_url_resp.file_id);
+
+            // Step 2: Upload file content to the URL
+            let upload_req = SlackApiFilesUploadViaUrlRequest::new(
+                upload_url_resp.upload_url,
+                content,
+                content_type,
+            );
+            session
+                .files_upload_via_url(&upload_req)
+                .await
+                .map_err(|e| ChannelError::channel("slack", format!("Failed to upload file content: {}", e)))?;
+
+            debug!("Uploaded file content for '{}'", filename);
+
+            // Track file for completion
+            uploaded_files.push(
+                SlackApiFilesComplete::new(upload_url_resp.file_id)
+                    .with_title(filename)
+            );
+        }
+
+        // Step 3: Complete upload and share to channel (if we have files)
+        if !uploaded_files.is_empty() {
+            let complete_req = SlackApiFilesCompleteUploadExternalRequest::new(uploaded_files)
+                .with_channel_id(channel_id.clone())
+                .opt_initial_comment(if message.text.is_empty() { None } else { Some(message.text.clone()) })
+                .opt_thread_ts(message.reply_to.as_ref().map(|ts| SlackTs::new(ts.clone())));
+
+            let complete_resp = session
+                .files_complete_upload_external(&complete_req)
+                .await
+                .map_err(|e| ChannelError::channel("slack", format!("Failed to complete upload: {}", e)))?;
+
+            debug!("Completed file upload, {} files shared", complete_resp.files.len());
+
+            // Return the file ID of the first file as the message ID
+            if let Some(first_file) = complete_resp.files.first() {
+                return Ok(SendResult::new(first_file.id.to_string()));
             }
         }
 
-        // Send the text message
+        // If no files but we have text, send as regular message
         if !message.text.is_empty() {
             return self.send(message).await;
         }
