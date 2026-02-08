@@ -7,10 +7,14 @@
 //! - Built-in tools for file system, execution, and more
 
 mod filesystem;
+mod messaging;
 mod system;
+mod web;
 
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
+pub use messaging::{MessageTool, SessionsListTool, SessionsSendTool, SessionsSpawnTool};
 pub use system::BashTool;
+pub use web::{WebFetchTool, WebSearchTool};
 
 use crate::error::AgentError;
 use crate::Result;
@@ -123,6 +127,10 @@ impl ToolRegistry {
 
         // System tools
         registry.register(Arc::new(BashTool::new())).await;
+
+        // Web tools
+        registry.register(Arc::new(WebFetchTool::new())).await;
+        registry.register(Arc::new(WebSearchTool::new())).await;
 
         registry
     }
