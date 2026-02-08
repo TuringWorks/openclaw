@@ -14,6 +14,7 @@ High-performance Rust implementation of the OpenClaw AI agent gateway.
 | `openclaw-gateway` | JSON-RPC gateway server over WebSocket |
 | `openclaw-cli` | Command-line interface |
 | `openclaw-plugin-sdk` | Plugin development kit for extensions |
+| `openclaw-providers` | Model provider integrations (Anthropic, OpenAI, Google) |
 
 ## Building
 
@@ -44,15 +45,28 @@ cargo test -p openclaw-channels --features telegram
 ## Running
 
 ```bash
-# Start the gateway
-cargo run -p openclaw-cli -- gateway run
+# Start the gateway with Anthropic (default)
+ANTHROPIC_API_KEY=your-key cargo run -p openclaw-cli -- gateway run
 
-# Start on a specific port
-cargo run -p openclaw-cli -- gateway run --port 18789
+# Start with OpenAI
+OPENAI_API_KEY=your-key cargo run -p openclaw-cli -- gateway run --provider openai
+
+# Start with Google Gemini
+GOOGLE_API_KEY=your-key cargo run -p openclaw-cli -- gateway run --provider google
+
+# Start on a specific port with custom model
+ANTHROPIC_API_KEY=xxx cargo run -p openclaw-cli -- gateway run --port 18789 --model claude-opus-4-20250514
 
 # Show help
 cargo run -p openclaw-cli -- --help
 ```
+
+Environment variables:
+- `ANTHROPIC_API_KEY` - Anthropic Claude API key
+- `OPENAI_API_KEY` - OpenAI API key
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY` - Google Gemini API key
+- `OPENCLAW_PROVIDER` - Default provider (anthropic, openai, google)
+- `OPENCLAW_MODEL` - Default model to use
 
 ## Channel Features
 
@@ -185,6 +199,33 @@ The gateway exposes 54+ RPC methods for:
 - Cron jobs (`cron.list`, `cron.create`, `cron.update`, `cron.delete`)
 - Skill management (`skills.list`, `skills.run`)
 - System operations (`system.info`, `system.logs`, `system.restart`)
+
+## Model Providers
+
+The `openclaw-providers` crate includes integrations for major AI providers:
+
+### Anthropic Claude
+- Models: `claude-opus-4-20250514`, `claude-sonnet-4-20250514`, `claude-3-5-haiku-20241022`
+- Features: Streaming, tool calling, vision, 200K context
+
+### OpenAI GPT
+- Models: `gpt-4o`, `gpt-4o-mini`, `o1`, `o3-mini`
+- Features: Streaming, tool calling, vision, 128K context
+
+### Google Gemini
+- Models: `gemini-2.0-flash`, `gemini-1.5-pro`
+- Features: Streaming, tool calling, vision, 2M context
+
+```rust
+use openclaw_providers::{anthropic::AnthropicProvider, Provider};
+
+let provider = AnthropicProvider::from_env()?;
+let response = provider.chat(
+    "claude-sonnet-4-20250514",
+    &[Message::user("Hello!")],
+    None,
+).await?;
+```
 
 ## Plugin SDK
 
