@@ -10,6 +10,7 @@ readme = "README.md"
 openclaw-core = { path = "../openclaw-core" }
 openclaw-sandbox = { path = "../openclaw-sandbox" }
 openclaw-channels = { path = "../openclaw-channels" }
+openclaw-memory = { path = "../openclaw-memory" }
 
 # Async runtime
 tokio = { version = "1.35", features = ["full", "sync", "time"] }

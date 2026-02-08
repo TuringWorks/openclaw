@@ -3863,6 +3863,7 @@ dependencies = [
  "mockall",
  "openclaw-channels",
  "openclaw-core",
+ "openclaw-memory",
  "openclaw-sandbox",
  "rand 0.8.5",
  "regex",
