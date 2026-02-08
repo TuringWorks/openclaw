@@ -2433,6 +2433,17 @@ dependencies = [
 
 [[package]]
 name = "hostname"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c731c3e10504cc8ed35cfe2f1db4c9274c3d35fa486e3b31df46f068ef3e867"
+dependencies = [
+ "libc",
+ "match_cfg",
+ "winapi",
+]
+
+[[package]]
+name = "hostname"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "617aaa3557aef3810a6369d0a99fac8a080891b68bd9f9812a1eeda0c0730cbd"
@@ -3487,6 +3498,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "match_cfg"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
+
+[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3847,6 +3864,7 @@ dependencies = [
  "openclaw-channels",
  "openclaw-core",
  "openclaw-sandbox",
+ "rand 0.8.5",
  "regex",
  "reqwest 0.11.27",
  "serde",
@@ -3924,7 +3942,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "hex",
- "hostname",
+ "hostname 0.4.2",
  "json5",
  "once_cell",
  "rand 0.8.5",
@@ -3949,10 +3967,12 @@ dependencies = [
  "axum",
  "chrono",
  "futures",
+ "hostname 0.3.1",
  "hyper 1.8.1",
  "openclaw-agent",
  "openclaw-channels",
  "openclaw-core",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -3985,6 +4005,25 @@ dependencies = [
  "tokio-test",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "openclaw-plugin-sdk"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dirs 5.0.1",
+ "openclaw-channels",
+ "openclaw-core",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tracing",
 ]
 
 [[package]]

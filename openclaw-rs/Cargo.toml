@@ -8,6 +8,7 @@ members = [
     "crates/openclaw-memory",
     "crates/openclaw-gateway",
     "crates/openclaw-cli",
+    "crates/openclaw-plugin-sdk",
 ]
 
 [workspace.package]
@@ -77,6 +78,9 @@ regex = "1.10"
 # Channels
 teloxide = { version = "0.12", features = ["macros"] }
 
+# Version handling
+semver = "1.0"
+
 # Internal crates
 openclaw-core = { path = "crates/openclaw-core" }
 openclaw-sandbox = { path = "crates/openclaw-sandbox" }
@@ -84,6 +88,7 @@ openclaw-channels = { path = "crates/openclaw-channels" }
 openclaw-agent = { path = "crates/openclaw-agent" }
 openclaw-memory = { path = "crates/openclaw-memory" }
 openclaw-gateway = { path = "crates/openclaw-gateway" }
+openclaw-plugin-sdk = { path = "crates/openclaw-plugin-sdk" }
 
 [profile.release]
 lto = "thin"
