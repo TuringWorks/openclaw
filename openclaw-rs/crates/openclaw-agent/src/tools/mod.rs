@@ -8,6 +8,7 @@
 
 mod automation;
 mod browser;
+mod channel_actions;
 mod filesystem;
 mod media;
 mod memory;
@@ -17,6 +18,7 @@ mod web;
 
 pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
+pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use media::{ImageTool, TtsTool};
 pub use memory::{MemoryGetTool, MemorySearchTool};
