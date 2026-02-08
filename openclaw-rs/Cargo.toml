@@ -9,6 +9,7 @@ members = [
     "crates/openclaw-gateway",
     "crates/openclaw-cli",
     "crates/openclaw-plugin-sdk",
+    "crates/openclaw-providers",
     "examples/hello-plugin",
 ]
 
@@ -90,6 +91,7 @@ openclaw-agent = { path = "crates/openclaw-agent" }
 openclaw-memory = { path = "crates/openclaw-memory" }
 openclaw-gateway = { path = "crates/openclaw-gateway" }
 openclaw-plugin-sdk = { path = "crates/openclaw-plugin-sdk" }
+openclaw-providers = { path = "crates/openclaw-providers" }
 
 [profile.release]
 lto = "thin"
