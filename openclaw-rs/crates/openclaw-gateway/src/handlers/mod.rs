@@ -18,6 +18,7 @@ pub mod system;
 pub mod wizard;
 
 use crate::methods::MethodRegistry;
+use openclaw_providers::Provider;
 use std::sync::Arc;
 
 pub use agent::{AgentHandler, AgentStreamHandler};
@@ -260,7 +261,7 @@ pub async fn register_all(registry: &MethodRegistry, context: HandlerContext) {
 }
 
 /// Shared context for method handlers.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct HandlerContext {
     /// Configuration.
     pub config: Option<Arc<tokio::sync::RwLock<serde_json::Value>>>,
@@ -270,6 +271,24 @@ pub struct HandlerContext {
 
     /// Active channels count.
     pub active_channels: Arc<std::sync::atomic::AtomicUsize>,
+
+    /// Model provider (optional, for chat completions).
+    pub provider: Option<Arc<dyn Provider>>,
+
+    /// Default model to use.
+    pub default_model: String,
+}
+
+impl Default for HandlerContext {
+    fn default() -> Self {
+        Self {
+            config: None,
+            sessions: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            active_channels: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            provider: None,
+            default_model: "claude-sonnet-4-20250514".to_string(),
+        }
+    }
 }
 
 /// Simplified session data for handlers.
@@ -286,16 +305,24 @@ pub struct SessionData {
 impl HandlerContext {
     /// Create a new handler context.
     pub fn new() -> Self {
-        Self {
-            config: None,
-            sessions: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
-            active_channels: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-        }
+        Self::default()
     }
 
     /// Set the configuration.
     pub fn with_config(mut self, config: Arc<tokio::sync::RwLock<serde_json::Value>>) -> Self {
         self.config = Some(config);
+        self
+    }
+
+    /// Set the model provider.
+    pub fn with_provider(mut self, provider: Arc<dyn Provider>) -> Self {
+        self.provider = Some(provider);
+        self
+    }
+
+    /// Set the default model.
+    pub fn with_default_model(mut self, model: impl Into<String>) -> Self {
+        self.default_model = model.into();
         self
     }
 }

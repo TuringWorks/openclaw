@@ -9,6 +9,7 @@ license = "MIT"
 openclaw-core = { path = "../openclaw-core" }
 openclaw-agent = { path = "../openclaw-agent" }
 openclaw-channels = { path = "../openclaw-channels" }
+openclaw-providers = { path = "../openclaw-providers", features = ["anthropic", "openai", "google"] }
 
 # Async runtime
 tokio = { version = "1.35", features = ["full", "sync"] }

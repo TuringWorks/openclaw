@@ -102,12 +102,27 @@ impl Gateway {
     pub async fn with_default_handlers(config: GatewayConfig) -> Self {
         let gateway = Self::new(config);
 
-        // Create handler context
-        let context = crate::handlers::HandlerContext {
-            config: Some(Arc::new(RwLock::new(serde_json::json!({})))),
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            active_channels: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-        };
+        // Create handler context with default config
+        let context = crate::handlers::HandlerContext::new()
+            .with_config(Arc::new(RwLock::new(serde_json::json!({}))));
+
+        // Register all handlers
+        crate::handlers::register_all(&gateway.state.methods, context).await;
+
+        gateway
+    }
+
+    /// Create a new gateway with a model provider and default handlers.
+    pub async fn with_provider(
+        config: GatewayConfig,
+        provider: std::sync::Arc<dyn openclaw_providers::Provider>,
+    ) -> Self {
+        let gateway = Self::new(config);
+
+        // Create handler context with provider
+        let context = crate::handlers::HandlerContext::new()
+            .with_config(Arc::new(RwLock::new(serde_json::json!({}))))
+            .with_provider(provider);
 
         // Register all handlers
         crate::handlers::register_all(&gateway.state.methods, context).await;

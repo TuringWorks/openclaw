@@ -5,9 +5,10 @@ use crate::error::GatewayError;
 use crate::methods::MethodHandler;
 use crate::Result;
 use async_trait::async_trait;
+use openclaw_providers::{ChatOptions, Message as ProviderMessage};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Parameters for chat method.
 #[derive(Debug, Deserialize)]
@@ -74,8 +75,8 @@ impl MethodHandler for ChatHandler {
 
         let session_key = params.session_key.unwrap_or_else(|| "default".to_string());
 
-        // Get or create session
-        {
+        // Get or create session and build message history
+        let messages = {
             let mut sessions = self.context.sessions.write().await;
             sessions.entry(session_key.clone()).or_insert_with(|| SessionData {
                 key: session_key.clone(),
@@ -94,17 +95,61 @@ impl MethodHandler for ChatHandler {
                 }));
                 session.last_activity = Some(chrono::Utc::now());
             }
-        }
 
-        // TODO: Actually run the agent and get response
-        // For now, return a placeholder
+            // Build provider messages from session history
+            let session = sessions.get(&session_key).unwrap();
+            session.messages.iter().filter_map(|m| {
+                let role = m.get("role")?.as_str()?;
+                let content = m.get("content")?.as_str()?;
+                match role {
+                    "user" => Some(ProviderMessage::user(content)),
+                    "assistant" => Some(ProviderMessage::assistant(content)),
+                    "system" => Some(ProviderMessage::system(content)),
+                    _ => None,
+                }
+            }).collect::<Vec<_>>()
+        };
+
+        // Try to use the provider if available
+        let (response_message, usage) = if let Some(provider) = &self.context.provider {
+            let model = params.model.as_deref().unwrap_or(&self.context.default_model);
+            let options = ChatOptions::with_max_tokens(4096);
+
+            match provider.chat(model, &messages, Some(options)).await {
+                Ok(response) => {
+                    // Store assistant message in session
+                    {
+                        let mut sessions = self.context.sessions.write().await;
+                        if let Some(session) = sessions.get_mut(&session_key) {
+                            session.messages.push(serde_json::json!({
+                                "role": "assistant",
+                                "content": response.content,
+                            }));
+                        }
+                    }
+
+                    (
+                        response.content,
+                        Some(TokenUsage {
+                            input: response.usage.input_tokens as u64,
+                            output: response.usage.output_tokens as u64,
+                        }),
+                    )
+                }
+                Err(e) => {
+                    warn!("Provider error: {}", e);
+                    (format!("Error: {}", e), None)
+                }
+            }
+        } else {
+            // No provider configured, return echo
+            (format!("Echo: {} (no provider configured)", params.message), None)
+        };
+
         let response = ChatResponse {
             session_key: session_key.clone(),
-            message: format!("Echo: {}", params.message),
-            usage: Some(TokenUsage {
-                input: params.message.len() as u64,
-                output: params.message.len() as u64 + 6,
-            }),
+            message: response_message,
+            usage,
             message_id: Some(uuid::Uuid::new_v4().to_string()),
         };
 
