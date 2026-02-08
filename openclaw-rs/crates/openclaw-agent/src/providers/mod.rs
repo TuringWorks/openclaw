@@ -1,6 +1,16 @@
 //! Model provider integrations.
+//!
+//! This module provides integrations with various AI model providers:
+//!
+//! - [`AnthropicProvider`] - Claude models (Opus, Sonnet, Haiku)
+//! - [`OpenAIProvider`] - GPT-4o, GPT-4, GPT-3.5
+//! - [`OllamaProvider`] - Local models (Llama, Mistral, Qwen, etc.)
+//! - [`OpenRouterProvider`] - Unified access to 100+ models
 
 pub mod anthropic;
+pub mod ollama;
+pub mod openai;
+pub mod openrouter;
 
 use crate::Result;
 use async_trait::async_trait;
@@ -76,3 +86,6 @@ pub trait ModelProvider: Send + Sync {
 }
 
 pub use anthropic::AnthropicProvider;
+pub use ollama::OllamaProvider;
+pub use openai::OpenAIProvider;
+pub use openrouter::OpenRouterProvider;
