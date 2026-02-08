@@ -43,6 +43,12 @@ uuid = { version = "1.6", features = ["v4"] }
 # Regex for pattern matching
 regex = "1.10"
 
+# Glob pattern matching
+glob = "0.3"
+
+# Diff for edit operations
+similar = "2.4"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.8"
