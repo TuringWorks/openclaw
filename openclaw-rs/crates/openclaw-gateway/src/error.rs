@@ -41,6 +41,10 @@ pub enum GatewayError {
     #[error("Session error: {0}")]
     Session(String),
 
+    /// Not found error.
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     /// Internal error.
     #[error("Internal error: {0}")]
     Internal(String),
@@ -54,6 +58,7 @@ impl GatewayError {
             Self::InvalidParams(_) => -32602,
             Self::Json(_) => -32700,
             Self::Auth(_) => -32001,
+            Self::NotFound(_) => -32002,
             _ => -32603,
         }
     }
