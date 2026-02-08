@@ -45,6 +45,9 @@ uuid = { version = "1.6", features = ["v4"] }
 # Random
 rand = "0.8"
 
+# System info
+hostname = "0.3"
+
 [dev-dependencies]
 tokio-test = "0.4"
 

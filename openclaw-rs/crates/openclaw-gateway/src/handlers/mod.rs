@@ -5,10 +5,14 @@
 pub mod chat;
 pub mod config;
 pub mod cron;
+pub mod device;
+pub mod exec;
 pub mod health;
 pub mod models;
 pub mod nodes;
+pub mod send;
 pub mod sessions;
+pub mod system;
 
 use crate::methods::MethodRegistry;
 use std::sync::Arc;
@@ -19,14 +23,27 @@ pub use cron::{
     CronAddHandler, CronListHandler, CronRemoveHandler, CronRunHandler, CronRunsHandler,
     CronStatusHandler, CronUpdateHandler, WakeHandler,
 };
+pub use device::{
+    DevicePairApproveHandler, DevicePairListHandler, DevicePairRejectHandler,
+    DeviceTokenRevokeHandler, DeviceTokenRotateHandler,
+};
+pub use exec::{
+    ExecApprovalRequestHandler, ExecApprovalResolveHandler, ExecApprovalsGetHandler,
+    ExecApprovalsNodeGetHandler, ExecApprovalsNodeSetHandler, ExecApprovalsSetHandler,
+};
 pub use health::{HealthHandler, StatusHandler};
 pub use models::ModelsListHandler;
 pub use nodes::{
     NodeDescribeHandler, NodeInvokeHandler, NodeListHandler, NodePairApproveHandler,
     NodePairRejectHandler, NodePairRequestHandler, NodeRenameHandler, NodeUnpairHandler,
 };
+pub use send::{SendMessageHandler, SendPollHandler};
 pub use sessions::{
     SessionsDeleteHandler, SessionsListHandler, SessionsPatchHandler, SessionsResolveHandler,
+};
+pub use system::{
+    LastHeartbeatHandler, LogsTailHandler, SetHeartbeatsHandler, SystemEventHandler,
+    SystemPresenceHandler,
 };
 
 /// Register all built-in method handlers.
@@ -135,6 +152,68 @@ pub async fn register_all(registry: &MethodRegistry, context: HandlerContext) {
         .await;
     registry
         .register("wake", Arc::new(WakeHandler::new(ctx.clone())))
+        .await;
+
+    // Device methods
+    registry
+        .register("device.pair.list", Arc::new(DevicePairListHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("device.pair.approve", Arc::new(DevicePairApproveHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("device.pair.reject", Arc::new(DevicePairRejectHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("device.token.rotate", Arc::new(DeviceTokenRotateHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("device.token.revoke", Arc::new(DeviceTokenRevokeHandler::new(ctx.clone())))
+        .await;
+
+    // Exec approval methods
+    registry
+        .register("exec.approvals.get", Arc::new(ExecApprovalsGetHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("exec.approvals.set", Arc::new(ExecApprovalsSetHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("exec.approvals.node.get", Arc::new(ExecApprovalsNodeGetHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("exec.approvals.node.set", Arc::new(ExecApprovalsNodeSetHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("exec.approval.request", Arc::new(ExecApprovalRequestHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("exec.approval.resolve", Arc::new(ExecApprovalResolveHandler::new(ctx.clone())))
+        .await;
+
+    // Send methods
+    registry
+        .register("send", Arc::new(SendMessageHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("send.poll", Arc::new(SendPollHandler::new(ctx.clone())))
+        .await;
+
+    // System methods
+    registry
+        .register("system-presence", Arc::new(SystemPresenceHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("system-event", Arc::new(SystemEventHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("last-heartbeat", Arc::new(LastHeartbeatHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("set-heartbeats", Arc::new(SetHeartbeatsHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("logs.tail", Arc::new(LogsTailHandler::new(ctx.clone())))
         .await;
 }
 
