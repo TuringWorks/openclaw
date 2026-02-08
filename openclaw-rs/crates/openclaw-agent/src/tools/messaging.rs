@@ -425,6 +425,144 @@ impl Tool for SessionsListTool {
     }
 }
 
+/// Session history tool - Get conversation history for a session.
+pub struct SessionsHistoryTool;
+
+#[async_trait]
+impl Tool for SessionsHistoryTool {
+    fn name(&self) -> &str {
+        "sessions_history"
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "sessions_history".to_string(),
+            description: "Get the conversation history for a session".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "The session ID to get history for"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of messages to return (default: 50)"
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Number of messages to skip (for pagination)"
+                    }
+                },
+                "required": ["session_id"]
+            }),
+            execution: ToolExecutionConfig::default(),
+        }
+    }
+
+    async fn execute(
+        &self,
+        tool_use_id: &str,
+        args: serde_json::Value,
+        _context: &ToolContext,
+    ) -> Result<ToolResult> {
+        let start = Instant::now();
+
+        let session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AgentError::tool_execution("Missing 'session_id' argument"))?;
+
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50);
+        let offset = args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0);
+
+        debug!(
+            "Getting history for session {} (limit: {}, offset: {})",
+            session_id, limit, offset
+        );
+
+        // TODO: Actually get history from session manager
+
+        let duration = start.elapsed();
+        Ok(
+            ToolResult::success(tool_use_id, serde_json::json!({
+                "session_id": session_id,
+                "messages": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+            }))
+            .with_duration(duration),
+        )
+    }
+
+    fn group(&self) -> ToolGroup {
+        ToolGroup::Session
+    }
+}
+
+/// Session status tool - Get current session status.
+pub struct SessionStatusTool;
+
+#[async_trait]
+impl Tool for SessionStatusTool {
+    fn name(&self) -> &str {
+        "session_status"
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "session_status".to_string(),
+            description: "Get the current status of a session".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "The session ID to get status for (optional, defaults to current session)"
+                    }
+                }
+            }),
+            execution: ToolExecutionConfig::default(),
+        }
+    }
+
+    async fn execute(
+        &self,
+        tool_use_id: &str,
+        args: serde_json::Value,
+        context: &ToolContext,
+    ) -> Result<ToolResult> {
+        let start = Instant::now();
+
+        let session_id = args
+            .get("session_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| context.session_id.clone());
+
+        debug!("Getting status for session {}", session_id);
+
+        // TODO: Actually get status from session manager
+
+        let duration = start.elapsed();
+        Ok(
+            ToolResult::success(tool_use_id, serde_json::json!({
+                "session_id": session_id,
+                "status": "active",
+                "agent_id": context.agent_id,
+                "message_count": 0,
+                "created_at": chrono::Utc::now().to_rfc3339(),
+            }))
+            .with_duration(duration),
+        )
+    }
+
+    fn group(&self) -> ToolGroup {
+        ToolGroup::Session
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,5 +589,17 @@ mod tests {
     fn test_sessions_list_tool_creation() {
         let tool = SessionsListTool;
         assert_eq!(tool.name(), "sessions_list");
+    }
+
+    #[test]
+    fn test_sessions_history_tool_creation() {
+        let tool = SessionsHistoryTool;
+        assert_eq!(tool.name(), "sessions_history");
+    }
+
+    #[test]
+    fn test_session_status_tool_creation() {
+        let tool = SessionStatusTool;
+        assert_eq!(tool.name(), "session_status");
     }
 }

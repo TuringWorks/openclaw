@@ -7,12 +7,17 @@
 //! - Built-in tools for file system, execution, and more
 
 mod filesystem;
+mod memory;
 mod messaging;
 mod system;
 mod web;
 
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
-pub use messaging::{MessageTool, SessionsListTool, SessionsSendTool, SessionsSpawnTool};
+pub use memory::{MemoryGetTool, MemorySearchTool};
+pub use messaging::{
+    MessageTool, SessionStatusTool, SessionsHistoryTool, SessionsListTool, SessionsSendTool,
+    SessionsSpawnTool,
+};
 pub use system::BashTool;
 pub use web::{WebFetchTool, WebSearchTool};
 
