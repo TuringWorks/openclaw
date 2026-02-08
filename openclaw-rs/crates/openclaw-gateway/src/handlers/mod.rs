@@ -4,8 +4,10 @@
 
 pub mod chat;
 pub mod config;
+pub mod cron;
 pub mod health;
 pub mod models;
+pub mod nodes;
 pub mod sessions;
 
 use crate::methods::MethodRegistry;
@@ -13,8 +15,16 @@ use std::sync::Arc;
 
 pub use chat::{ChatAbortHandler, ChatHandler, ChatHistoryHandler};
 pub use config::{ConfigGetHandler, ConfigPatchHandler, ConfigSchemaHandler, ConfigSetHandler};
+pub use cron::{
+    CronAddHandler, CronListHandler, CronRemoveHandler, CronRunHandler, CronRunsHandler,
+    CronStatusHandler, CronUpdateHandler, WakeHandler,
+};
 pub use health::{HealthHandler, StatusHandler};
 pub use models::ModelsListHandler;
+pub use nodes::{
+    NodeDescribeHandler, NodeInvokeHandler, NodeListHandler, NodePairApproveHandler,
+    NodePairRejectHandler, NodePairRequestHandler, NodeRenameHandler, NodeUnpairHandler,
+};
 pub use sessions::{
     SessionsDeleteHandler, SessionsListHandler, SessionsPatchHandler, SessionsResolveHandler,
 };
@@ -73,6 +83,58 @@ pub async fn register_all(registry: &MethodRegistry, context: HandlerContext) {
         .await;
     registry
         .register("config.schema", Arc::new(ConfigSchemaHandler::new(ctx.clone())))
+        .await;
+
+    // Node methods
+    registry
+        .register("node.list", Arc::new(NodeListHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.describe", Arc::new(NodeDescribeHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.pair.request", Arc::new(NodePairRequestHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.pair.approve", Arc::new(NodePairApproveHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.pair.reject", Arc::new(NodePairRejectHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.unpair", Arc::new(NodeUnpairHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.rename", Arc::new(NodeRenameHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("node.invoke", Arc::new(NodeInvokeHandler::new(ctx.clone())))
+        .await;
+
+    // Cron methods
+    registry
+        .register("cron.list", Arc::new(CronListHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("cron.status", Arc::new(CronStatusHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("cron.add", Arc::new(CronAddHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("cron.update", Arc::new(CronUpdateHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("cron.remove", Arc::new(CronRemoveHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("cron.run", Arc::new(CronRunHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("cron.runs", Arc::new(CronRunsHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("wake", Arc::new(WakeHandler::new(ctx.clone())))
         .await;
 }
 
