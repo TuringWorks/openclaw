@@ -6,11 +6,19 @@
 //! - [`OpenAIProvider`] - GPT-4o, GPT-4, GPT-3.5
 //! - [`OllamaProvider`] - Local models (Llama, Mistral, Qwen, etc.)
 //! - [`OpenRouterProvider`] - Unified access to 100+ models
+//! - [`DeepSeekProvider`] - DeepSeek-V3, DeepSeek Coder, DeepSeek Reasoner
+//! - [`MoonshotProvider`] - Moonshot/Kimi models (8k, 32k, 128k context)
+//! - [`QwenProvider`] - Alibaba Qwen models via DashScope
+//! - [`ZhipuProvider`] - Zhipu AI GLM-4 models
 
 pub mod anthropic;
+pub mod deepseek;
+pub mod moonshot;
 pub mod ollama;
 pub mod openai;
 pub mod openrouter;
+pub mod qwen;
+pub mod zhipu;
 
 use crate::Result;
 use async_trait::async_trait;
@@ -86,6 +94,10 @@ pub trait ModelProvider: Send + Sync {
 }
 
 pub use anthropic::AnthropicProvider;
+pub use deepseek::DeepSeekProvider;
+pub use moonshot::MoonshotProvider;
 pub use ollama::OllamaProvider;
 pub use openai::OpenAIProvider;
 pub use openrouter::OpenRouterProvider;
+pub use qwen::QwenProvider;
+pub use zhipu::ZhipuProvider;
