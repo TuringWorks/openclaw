@@ -1,0 +1,21 @@
+[package]
+name = "hello-plugin"
+version = "0.1.0"
+edition = "2021"
+description = "Example OpenClaw plugin demonstrating the Plugin SDK"
+license = "MIT"
+
+[dependencies]
+openclaw-plugin-sdk = { path = "../../crates/openclaw-plugin-sdk" }
+openclaw-core = { path = "../../crates/openclaw-core" }
+
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1.35", features = ["rt", "macros"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

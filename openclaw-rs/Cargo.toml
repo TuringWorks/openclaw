@@ -9,6 +9,7 @@ members = [
     "crates/openclaw-gateway",
     "crates/openclaw-cli",
     "crates/openclaw-plugin-sdk",
+    "examples/hello-plugin",
 ]
 
 [workspace.package]

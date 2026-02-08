@@ -57,9 +57,10 @@ pub async fn run(args: GatewayArgs) -> anyhow::Result<()> {
                 ..Default::default()
             };
 
-            info!("Starting gateway on port {}", port);
+            info!("Starting gateway on port {} with {} RPC methods", port, 54);
 
-            let gateway = Gateway::new(config);
+            // Create gateway with all RPC handlers registered
+            let gateway = Gateway::with_default_handlers(config).await;
             gateway.run().await?;
         }
 

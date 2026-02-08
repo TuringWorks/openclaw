@@ -50,7 +50,7 @@ pub use channel::{ChannelPlugin, ChannelPluginFactory};
 pub use error::{PluginError, Result};
 pub use hooks::{Hook, HookContext, HookResult, HookType};
 pub use provider::{ModelProviderPlugin, ProviderCapabilities};
-pub use tool::{ToolPlugin, ToolPluginFactory};
+pub use tool::{PluginTool, ToolExecutionContext, ToolPlugin, ToolPluginFactory};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -465,8 +465,8 @@ pub mod prelude {
         Channel, ChannelLifecycle, ChannelPlugin, ChannelPluginFactory, ChannelReceiver,
         ChannelSender, Hook, HookContext, HookResult, HookType, ModelProviderPlugin, Plugin,
         PluginCapability, PluginConfig, PluginContext, PluginError, PluginHealth, PluginLoader,
-        PluginMetadata, PluginState, ProviderCapabilities, Result, ToolPlugin, ToolPluginFactory,
-        Version,
+        PluginMetadata, PluginState, PluginTool, ProviderCapabilities, Result, ToolExecutionContext,
+        ToolPlugin, ToolPluginFactory, Version,
     };
 
     pub use super::{
@@ -475,6 +475,9 @@ pub mod prelude {
     };
 
     pub use async_trait::async_trait;
+
+    // Re-export the plugin macro
+    pub use crate::openclaw_plugin;
 }
 
 /// Macro for exporting a plugin.

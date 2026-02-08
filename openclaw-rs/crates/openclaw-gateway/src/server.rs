@@ -98,6 +98,23 @@ impl Gateway {
         Self { state }
     }
 
+    /// Create a new gateway with default handlers registered.
+    pub async fn with_default_handlers(config: GatewayConfig) -> Self {
+        let gateway = Self::new(config);
+
+        // Create handler context
+        let context = crate::handlers::HandlerContext {
+            config: Some(Arc::new(RwLock::new(serde_json::json!({})))),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            active_channels: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+
+        // Register all handlers
+        crate::handlers::register_all(&gateway.state.methods, context).await;
+
+        gateway
+    }
+
     /// Get the method registry for registering handlers.
     pub fn methods(&self) -> &Arc<MethodRegistry> {
         &self.state.methods
