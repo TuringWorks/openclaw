@@ -2,6 +2,7 @@
 //!
 //! This module contains implementations for all gateway RPC methods.
 
+pub mod agent;
 pub mod chat;
 pub mod config;
 pub mod cron;
@@ -12,11 +13,14 @@ pub mod models;
 pub mod nodes;
 pub mod send;
 pub mod sessions;
+pub mod skills;
 pub mod system;
+pub mod wizard;
 
 use crate::methods::MethodRegistry;
 use std::sync::Arc;
 
+pub use agent::{AgentHandler, AgentStreamHandler};
 pub use chat::{ChatAbortHandler, ChatHandler, ChatHistoryHandler};
 pub use config::{ConfigGetHandler, ConfigPatchHandler, ConfigSchemaHandler, ConfigSetHandler};
 pub use cron::{
@@ -41,10 +45,12 @@ pub use send::{SendMessageHandler, SendPollHandler};
 pub use sessions::{
     SessionsDeleteHandler, SessionsListHandler, SessionsPatchHandler, SessionsResolveHandler,
 };
+pub use skills::{SkillsBinsHandler, SkillsInstallHandler, SkillsStatusHandler, SkillsUpdateHandler};
 pub use system::{
     LastHeartbeatHandler, LogsTailHandler, SetHeartbeatsHandler, SystemEventHandler,
     SystemPresenceHandler,
 };
+pub use wizard::{WizardCancelHandler, WizardNextHandler, WizardStartHandler, WizardStatusHandler};
 
 /// Register all built-in method handlers.
 pub async fn register_all(registry: &MethodRegistry, context: HandlerContext) {
@@ -214,6 +220,42 @@ pub async fn register_all(registry: &MethodRegistry, context: HandlerContext) {
         .await;
     registry
         .register("logs.tail", Arc::new(LogsTailHandler::new(ctx.clone())))
+        .await;
+
+    // Agent methods
+    registry
+        .register("agent", Arc::new(AgentHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("agent.stream", Arc::new(AgentStreamHandler::new(ctx.clone())))
+        .await;
+
+    // Skills methods
+    registry
+        .register("skills.status", Arc::new(SkillsStatusHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("skills.bins", Arc::new(SkillsBinsHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("skills.install", Arc::new(SkillsInstallHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("skills.update", Arc::new(SkillsUpdateHandler::new(ctx.clone())))
+        .await;
+
+    // Wizard methods
+    registry
+        .register("wizard.start", Arc::new(WizardStartHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("wizard.next", Arc::new(WizardNextHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("wizard.cancel", Arc::new(WizardCancelHandler::new(ctx.clone())))
+        .await;
+    registry
+        .register("wizard.status", Arc::new(WizardStatusHandler::new(ctx.clone())))
         .await;
 }
 
