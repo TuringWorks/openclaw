@@ -6,13 +6,19 @@
 //! - [`ToolExecutor`] for executing tools with sandboxing
 //! - Built-in tools for file system, execution, and more
 
+mod automation;
+mod browser;
 mod filesystem;
+mod media;
 mod memory;
 mod messaging;
 mod system;
 mod web;
 
+pub use automation::{CronTool, GatewayTool, NodesTool};
+pub use browser::BrowserTool;
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
+pub use media::{ImageTool, TtsTool};
 pub use memory::{MemoryGetTool, MemorySearchTool};
 pub use messaging::{
     MessageTool, SessionStatusTool, SessionsHistoryTool, SessionsListTool, SessionsSendTool,
