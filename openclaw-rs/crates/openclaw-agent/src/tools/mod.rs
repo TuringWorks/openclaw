@@ -13,7 +13,9 @@ mod filesystem;
 mod media;
 mod memory;
 mod messaging;
+mod notebook;
 mod system;
+mod tasks;
 mod web;
 
 pub use automation::{CronTool, GatewayTool, NodesTool};
@@ -26,7 +28,9 @@ pub use messaging::{
     MessageTool, SessionStatusTool, SessionsHistoryTool, SessionsListTool, SessionsSendTool,
     SessionsSpawnTool,
 };
+pub use notebook::NotebookEditTool;
 pub use system::BashTool;
+pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
 pub use web::{WebFetchTool, WebSearchTool};
 
 use crate::error::AgentError;
@@ -144,6 +148,45 @@ impl ToolRegistry {
         // Web tools
         registry.register(Arc::new(WebFetchTool::new())).await;
         registry.register(Arc::new(WebSearchTool::new())).await;
+
+        // Messaging tools
+        registry.register(Arc::new(MessageTool::new())).await;
+        registry.register(Arc::new(SessionsSpawnTool)).await;
+        registry.register(Arc::new(SessionsSendTool)).await;
+        registry.register(Arc::new(SessionsListTool)).await;
+        registry.register(Arc::new(SessionsHistoryTool)).await;
+        registry.register(Arc::new(SessionStatusTool)).await;
+
+        // Memory tools
+        registry.register(Arc::new(MemorySearchTool::new())).await;
+        registry.register(Arc::new(MemoryGetTool::new())).await;
+
+        // Automation tools
+        registry.register(Arc::new(CronTool::new())).await;
+        registry.register(Arc::new(GatewayTool::new())).await;
+        registry.register(Arc::new(NodesTool::new())).await;
+
+        // Media tools
+        registry.register(Arc::new(ImageTool::new())).await;
+        registry.register(Arc::new(TtsTool::new())).await;
+
+        // Browser tools
+        registry.register(Arc::new(BrowserTool::new())).await;
+
+        // Channel action tools
+        registry.register(Arc::new(TelegramActionsTool::new())).await;
+        registry.register(Arc::new(DiscordActionsTool::new())).await;
+        registry.register(Arc::new(SlackActionsTool::new())).await;
+
+        // Notebook tools
+        registry.register(Arc::new(NotebookEditTool::new())).await;
+
+        // Task tools (shared store)
+        let task_store = Arc::new(TaskStore::new());
+        registry.register(Arc::new(TaskCreateTool::new(task_store.clone()))).await;
+        registry.register(Arc::new(TaskListTool::new(task_store.clone()))).await;
+        registry.register(Arc::new(TaskUpdateTool::new(task_store.clone()))).await;
+        registry.register(Arc::new(TaskGetTool::new(task_store))).await;
 
         registry
     }
@@ -329,5 +372,46 @@ mod tests {
 
         // Check system tools
         assert!(tools.contains(&"bash".to_string()));
+
+        // Check web tools
+        assert!(tools.contains(&"web_fetch".to_string()));
+        assert!(tools.contains(&"web_search".to_string()));
+
+        // Check messaging tools
+        assert!(tools.contains(&"message".to_string()));
+        assert!(tools.contains(&"sessions_spawn".to_string()));
+
+        // Check memory tools
+        assert!(tools.contains(&"memory_search".to_string()));
+        assert!(tools.contains(&"memory_get".to_string()));
+
+        // Check automation tools
+        assert!(tools.contains(&"cron".to_string()));
+        assert!(tools.contains(&"gateway".to_string()));
+        assert!(tools.contains(&"nodes".to_string()));
+
+        // Check media tools
+        assert!(tools.contains(&"image".to_string()));
+        assert!(tools.contains(&"tts".to_string()));
+
+        // Check browser tools
+        assert!(tools.contains(&"browser".to_string()));
+
+        // Check channel action tools
+        assert!(tools.contains(&"telegram_actions".to_string()));
+        assert!(tools.contains(&"discord_actions".to_string()));
+        assert!(tools.contains(&"slack_actions".to_string()));
+
+        // Check notebook tools
+        assert!(tools.contains(&"notebook_edit".to_string()));
+
+        // Check task tools
+        assert!(tools.contains(&"task_create".to_string()));
+        assert!(tools.contains(&"task_list".to_string()));
+        assert!(tools.contains(&"task_update".to_string()));
+        assert!(tools.contains(&"task_get".to_string()));
+
+        // Total: 30 tools
+        assert_eq!(tools.len(), 30);
     }
 }

@@ -439,12 +439,10 @@ impl Provider for OpenAIProvider {
             };
         }
 
-        let model = model.to_string();
         let byte_stream = response.bytes_stream();
         let event_stream = byte_stream.eventsource();
 
         let stream = event_stream.filter_map(move |result| {
-            let model = model.clone();
             async move {
                 match result {
                     Ok(event) => {

@@ -4130,6 +4130,7 @@ dependencies = [
  "openclaw-channels",
  "openclaw-core",
  "openclaw-gateway",
+ "openclaw-providers",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
