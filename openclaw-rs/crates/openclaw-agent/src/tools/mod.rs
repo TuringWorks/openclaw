@@ -10,6 +10,7 @@ mod automation;
 mod browser;
 mod channel_actions;
 mod filesystem;
+mod lsp;
 mod media;
 mod memory;
 mod messaging;
@@ -22,6 +23,7 @@ pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
+pub use lsp::LspTool;
 pub use media::{ImageTool, TtsTool};
 pub use memory::{MemoryGetTool, MemorySearchTool};
 pub use messaging::{
@@ -180,6 +182,9 @@ impl ToolRegistry {
 
         // Notebook tools
         registry.register(Arc::new(NotebookEditTool::new())).await;
+
+        // LSP tools
+        registry.register(Arc::new(LspTool::new())).await;
 
         // Task tools (shared store)
         let task_store = Arc::new(TaskStore::new());
@@ -405,13 +410,16 @@ mod tests {
         // Check notebook tools
         assert!(tools.contains(&"notebook_edit".to_string()));
 
+        // Check LSP tools
+        assert!(tools.contains(&"lsp".to_string()));
+
         // Check task tools
         assert!(tools.contains(&"task_create".to_string()));
         assert!(tools.contains(&"task_list".to_string()));
         assert!(tools.contains(&"task_update".to_string()));
         assert!(tools.contains(&"task_get".to_string()));
 
-        // Total: 30 tools
-        assert_eq!(tools.len(), 30);
+        // Total: 31 tools
+        assert_eq!(tools.len(), 31);
     }
 }
