@@ -6,6 +6,7 @@
 //! - [`ToolExecutor`] for executing tools with sandboxing
 //! - Built-in tools for file system, execution, and more
 
+mod ask;
 mod automation;
 mod browser;
 mod channel_actions;
@@ -19,6 +20,7 @@ mod system;
 mod tasks;
 mod web;
 
+pub use ask::{AskUserTool, ConfirmTool};
 pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
@@ -192,6 +194,10 @@ impl ToolRegistry {
         registry.register(Arc::new(TaskListTool::new(task_store.clone()))).await;
         registry.register(Arc::new(TaskUpdateTool::new(task_store.clone()))).await;
         registry.register(Arc::new(TaskGetTool::new(task_store))).await;
+
+        // Interactive tools
+        registry.register(Arc::new(AskUserTool::new())).await;
+        registry.register(Arc::new(ConfirmTool::new())).await;
 
         registry
     }
@@ -419,7 +425,11 @@ mod tests {
         assert!(tools.contains(&"task_update".to_string()));
         assert!(tools.contains(&"task_get".to_string()));
 
-        // Total: 31 tools
-        assert_eq!(tools.len(), 31);
+        // Check interactive tools
+        assert!(tools.contains(&"ask_user".to_string()));
+        assert!(tools.contains(&"confirm".to_string()));
+
+        // Total: 33 tools
+        assert_eq!(tools.len(), 33);
     }
 }
