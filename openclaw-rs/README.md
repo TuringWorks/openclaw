@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 23 built-in tools:
+The agent includes 30 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -183,6 +183,15 @@ The agent includes 23 built-in tools:
 - `telegram_actions` - Telegram-specific actions
 - `discord_actions` - Discord-specific actions
 - `slack_actions` - Slack-specific actions
+
+### Notebook
+- `notebook_edit` - Edit Jupyter notebook cells
+
+### Task Management
+- `task_create` - Create tasks to track work
+- `task_list` - List all tasks
+- `task_update` - Update task status
+- `task_get` - Get task details
 
 ## Gateway RPC Methods
 
