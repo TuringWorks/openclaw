@@ -16,6 +16,7 @@ mod media;
 mod memory;
 mod messaging;
 mod notebook;
+mod plan;
 mod system;
 mod tasks;
 mod web;
@@ -33,6 +34,7 @@ pub use messaging::{
     SessionsSpawnTool,
 };
 pub use notebook::NotebookEditTool;
+pub use plan::{EnterPlanModeTool, ExitPlanModeTool, PlanState, SharedPlanState};
 pub use system::BashTool;
 pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
 pub use web::{WebFetchTool, WebSearchTool};
@@ -198,6 +200,11 @@ impl ToolRegistry {
         // Interactive tools
         registry.register(Arc::new(AskUserTool::new())).await;
         registry.register(Arc::new(ConfirmTool::new())).await;
+
+        // Planning tools (shared state)
+        let plan_state = Arc::new(tokio::sync::RwLock::new(PlanState::default()));
+        registry.register(Arc::new(EnterPlanModeTool::new(plan_state.clone()))).await;
+        registry.register(Arc::new(ExitPlanModeTool::new(plan_state))).await;
 
         registry
     }
@@ -429,7 +436,11 @@ mod tests {
         assert!(tools.contains(&"ask_user".to_string()));
         assert!(tools.contains(&"confirm".to_string()));
 
-        // Total: 33 tools
-        assert_eq!(tools.len(), 33);
+        // Check planning tools
+        assert!(tools.contains(&"enter_plan_mode".to_string()));
+        assert!(tools.contains(&"exit_plan_mode".to_string()));
+
+        // Total: 35 tools
+        assert_eq!(tools.len(), 35);
     }
 }

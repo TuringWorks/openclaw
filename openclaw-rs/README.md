@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 33 built-in tools:
+The agent includes 35 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -199,6 +199,10 @@ The agent includes 33 built-in tools:
 ### Interactive
 - `ask_user` - Ask user questions with multiple choice options
 - `confirm` - Request user confirmation for actions
+
+### Planning
+- `enter_plan_mode` - Enter planning mode for implementation design
+- `exit_plan_mode` - Exit planning mode and submit plan for approval
 
 ## Gateway RPC Methods
 
