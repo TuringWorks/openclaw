@@ -4061,6 +4061,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "chrono",
+ "dirs 5.0.1",
  "futures",
  "glob",
  "mockall",
