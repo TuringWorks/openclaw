@@ -12,6 +12,9 @@ use regex::Regex;
 use std::time::Instant;
 use tracing::warn;
 
+/// Shell metacharacters that indicate potential command injection in paths/arguments.
+const SHELL_METACHARACTERS: &[char] = &['`', '$', '|', '&', ';', '\n', '\r', '\0'];
+
 /// Bash tool - Execute shell commands with sandboxing.
 pub struct BashTool {
     /// Allowed commands (regex patterns).
@@ -34,12 +37,28 @@ impl BashTool {
     /// Create a new Bash tool with default security patterns.
     pub fn new() -> Self {
         let blocked_patterns = vec![
-            r"^rm\s+-rf\s+/".to_string(),
-            r"^sudo\s+".to_string(),
-            r"^chmod\s+777".to_string(),
+            // Destructive filesystem operations
+            r"rm\s+-rf\s+/".to_string(),
+            r"rm\s+-fr\s+/".to_string(),
+            // Privilege escalation
+            r"\bsudo\b".to_string(),
+            r"\bsu\s+-".to_string(),
+            r"\bdoas\b".to_string(),
+            // Overly permissive permissions
+            r"chmod\s+777".to_string(),
+            r"chmod\s+a\+rwx".to_string(),
+            // Device writes
             r">\s*/dev/".to_string(),
-            r"mkfs".to_string(),
-            r"dd\s+if=".to_string(),
+            // Filesystem destruction
+            r"\bmkfs\b".to_string(),
+            r"\bdd\s+if=".to_string(),
+            // Command substitution in arguments (CVE-2026-25157 vector)
+            r"\$\(.*\bssh\b".to_string(),
+            r"`.*\bssh\b".to_string(),
+            // Encoding-based bypass attempts
+            r"\\x[0-9a-fA-F]{2}.*\bssh\b".to_string(),
+            // Null byte injection
+            r"\\0|\\x00|\x00".to_string(),
         ];
 
         let blocked_regexes = blocked_patterns
@@ -72,6 +91,12 @@ impl BashTool {
 
     /// Check if a command is blocked.
     fn is_blocked(&self, command: &str) -> bool {
+        // Check for null bytes
+        if command.contains('\0') {
+            warn!("Blocked command with null bytes");
+            return true;
+        }
+
         for re in &self.blocked_regexes {
             if re.is_match(command) {
                 warn!("Blocked command: {}", command);
@@ -88,6 +113,7 @@ impl BashTool {
             "curl ", "wget ", "pip install", "npm install",
             "chmod", "chown", "kill ", "pkill",
             "git push", "git reset",
+            "docker ", "kubectl ", "ssh ",
         ];
 
         for pattern in &dangerous_patterns {
@@ -95,7 +121,34 @@ impl BashTool {
                 return true;
             }
         }
+
+        // Command substitution and pipe chains into dangerous commands
+        if command.contains("$(") || command.contains('`') {
+            return true;
+        }
+
         false
+    }
+
+    /// Validate and sanitize a working directory path.
+    /// Rejects paths with shell metacharacters to prevent command injection (CVE-2026-25157).
+    fn validate_path(path: &str) -> std::result::Result<std::path::PathBuf, AgentError> {
+        // Reject paths with shell metacharacters
+        if path.chars().any(|c| SHELL_METACHARACTERS.contains(&c)) {
+            return Err(AgentError::tool_execution(format!(
+                "Path contains shell metacharacters: {}",
+                path
+            )));
+        }
+
+        // Reject paths with control characters
+        if path.chars().any(|c| c.is_control()) {
+            return Err(AgentError::tool_execution(
+                "Path contains control characters",
+            ));
+        }
+
+        Ok(std::path::PathBuf::from(path))
     }
 }
 
@@ -152,12 +205,12 @@ impl Tool for BashTool {
             ));
         }
 
-        // Determine working directory
-        let cwd = args
-            .get("cwd")
-            .and_then(|v| v.as_str())
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| context.cwd.clone());
+        // Determine working directory with path validation
+        let cwd = if let Some(path_str) = args.get("cwd").and_then(|v| v.as_str()) {
+            Self::validate_path(path_str)?
+        } else {
+            context.cwd.clone()
+        };
 
         // Set up execution context
         let exec_context = ExecutionContext::new(&cwd)
@@ -225,9 +278,17 @@ mod tests {
         let tool = BashTool::new();
 
         assert!(tool.is_blocked("rm -rf /"));
-        assert!(tool.is_blocked("sudo rm -rf /"));
+        assert!(tool.is_blocked("rm -fr /home"));
+        assert!(tool.is_blocked("sudo rm something"));
+        assert!(tool.is_blocked("doas cat /etc/shadow"));
         assert!(!tool.is_blocked("ls -la"));
         assert!(!tool.is_blocked("echo hello"));
+    }
+
+    #[test]
+    fn test_bash_tool_blocks_null_bytes() {
+        let tool = BashTool::new();
+        assert!(tool.is_blocked("cat file\0.txt"));
     }
 
     #[test]
@@ -237,8 +298,17 @@ mod tests {
         assert!(tool.is_dangerous("rm -rf ./build"));
         assert!(tool.is_dangerous("curl http://example.com"));
         assert!(tool.is_dangerous("git push origin main"));
+        assert!(tool.is_dangerous("docker run ubuntu"));
+        assert!(tool.is_dangerous("ssh user@host"));
         assert!(!tool.is_dangerous("ls -la"));
-        assert!(!tool.is_dangerous("cat file.txt"));
+    }
+
+    #[test]
+    fn test_bash_tool_dangerous_command_substitution() {
+        let tool = BashTool::new();
+
+        assert!(tool.is_dangerous("echo $(whoami)"));
+        assert!(tool.is_dangerous("echo `whoami`"));
     }
 
     #[test]
@@ -247,6 +317,7 @@ mod tests {
 
         assert!(tool.requires_approval(&serde_json::json!({ "command": "rm -rf ./build" })));
         assert!(tool.requires_approval(&serde_json::json!({ "command": "git push" })));
+        assert!(tool.requires_approval(&serde_json::json!({ "command": "echo $(id)" })));
         assert!(!tool.requires_approval(&serde_json::json!({ "command": "ls -la" })));
     }
 
@@ -258,5 +329,25 @@ mod tests {
 
         assert!(tool.is_blocked("docker run"));
         assert!(tool.is_blocked("kubectl delete"));
+    }
+
+    #[test]
+    fn test_path_validation_clean() {
+        assert!(BashTool::validate_path("/home/user/project").is_ok());
+        assert!(BashTool::validate_path("/tmp/build-output").is_ok());
+    }
+
+    #[test]
+    fn test_path_validation_rejects_metacharacters() {
+        assert!(BashTool::validate_path("/home/user/$(whoami)").is_err());
+        assert!(BashTool::validate_path("/home/user/`id`").is_err());
+        assert!(BashTool::validate_path("/home/user;rm -rf /").is_err());
+        assert!(BashTool::validate_path("/home/user|cat /etc/passwd").is_err());
+        assert!(BashTool::validate_path("/home/user&bg").is_err());
+    }
+
+    #[test]
+    fn test_path_validation_rejects_null_bytes() {
+        assert!(BashTool::validate_path("/home/user\0/evil").is_err());
     }
 }

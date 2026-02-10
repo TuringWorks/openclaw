@@ -40,6 +40,10 @@ pub enum GatewayCommand {
         /// Default model to use
         #[arg(long, env = "OPENCLAW_MODEL")]
         model: Option<String>,
+
+        /// Authentication token for non-loopback connections (CVE-2026-25253 mitigation)
+        #[arg(long, env = "OPENCLAW_AUTH_TOKEN")]
+        auth_token: Option<String>,
     },
 
     /// Stop the gateway server
@@ -58,6 +62,7 @@ pub async fn run(args: GatewayArgs) -> anyhow::Result<()> {
             force: _,
             provider,
             model,
+            auth_token,
         } => {
             let bind_mode = match bind.as_str() {
                 "loopback" => BindMode::Loopback,
@@ -69,9 +74,14 @@ pub async fn run(args: GatewayArgs) -> anyhow::Result<()> {
                 }
             };
 
+            // Require auth for non-loopback binds when a token is provided
+            let require_auth = auth_token.is_some() && bind_mode != BindMode::Loopback;
+
             let config = GatewayConfig {
                 bind: bind_mode,
                 port,
+                auth_token,
+                require_auth,
                 ..Default::default()
             };
 

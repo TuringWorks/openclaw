@@ -41,18 +41,36 @@ impl MethodHandler for ExecApprovalsGetHandler {
         debug!("Exec approvals get request");
 
         // TODO: Get from config
+        // Default allowlist is intentionally minimal — `cat` was removed because it can
+        // exfiltrate arbitrary files (e.g. `cat /etc/shadow`). `git status` is kept
+        // because it is read-only, but `git push/reset/checkout` are on the denylist.
         let config = ApprovalConfig {
             require_approval: true,
             allowlist: vec![
                 "ls".to_string(),
-                "cat".to_string(),
+                "pwd".to_string(),
+                "echo".to_string(),
                 "git status".to_string(),
+                "git log".to_string(),
+                "git diff".to_string(),
             ],
             denylist: vec![
                 "rm -rf".to_string(),
+                "rm -fr".to_string(),
                 "sudo".to_string(),
+                "su -".to_string(),
+                "doas".to_string(),
+                "chmod 777".to_string(),
+                "git push".to_string(),
+                "git reset".to_string(),
+                "git checkout".to_string(),
+                "curl".to_string(),
+                "wget".to_string(),
+                "ssh".to_string(),
+                "nc ".to_string(),
+                "ncat".to_string(),
             ],
-            timeout_seconds: 60,
+            timeout_seconds: 30,
         };
 
         Ok(serde_json::to_value(config).unwrap())

@@ -90,7 +90,7 @@ impl SandboxProfile {
             filesystem: FilesystemRules::default(),
             network: NetworkRules::localhost_only(),
             syscalls: SyscallRules::standard(),
-            environment: EnvironmentRules::default(),
+            environment: EnvironmentRules::standard(),
             use_namespaces: false,
             drop_capabilities: true,
         }
@@ -227,13 +227,14 @@ impl NetworkRules {
     }
 
     /// Create localhost-only network rules.
+    /// Blocks the gateway port (18789) to prevent sandbox-to-gateway privilege escalation.
     pub fn localhost_only() -> Self {
         Self {
             enabled: true,
             localhost_only: true,
             allowed_hosts: vec!["localhost".to_string(), "127.0.0.1".to_string()],
             allowed_ports: vec![],
-            blocked_ports: vec![],
+            blocked_ports: vec![18789], // Block gateway port
         }
     }
 
@@ -244,7 +245,7 @@ impl NetworkRules {
             localhost_only: false,
             allowed_hosts: vec![],
             allowed_ports: vec![],
-            blocked_ports: vec![22, 23, 25], // SSH, Telnet, SMTP
+            blocked_ports: vec![22, 23, 25, 18789], // SSH, Telnet, SMTP, gateway
         }
     }
 }
@@ -355,18 +356,39 @@ pub struct EnvironmentRules {
 }
 
 impl EnvironmentRules {
+    /// Safe PATH for sandboxed execution — prevents PATH manipulation attacks (CVE-2026-24763).
+    pub const SAFE_PATH: &'static str = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+
     /// Create minimal environment rules.
+    /// Overrides PATH with a safe hardcoded value to prevent PATH manipulation.
     pub fn minimal() -> Self {
         let mut allowed = HashSet::new();
-        for var in &["PATH", "HOME", "USER", "SHELL", "TERM", "LANG"] {
+        for var in &["HOME", "USER", "SHELL", "TERM", "LANG"] {
             allowed.insert((*var).to_string());
         }
+
+        let mut set = std::collections::HashMap::new();
+        set.insert("PATH".to_string(), Self::SAFE_PATH.to_string());
 
         Self {
             inherit: false,
             allowed,
             blocked: Self::default_blocked(),
-            set: std::collections::HashMap::new(),
+            set,
+        }
+    }
+
+    /// Create standard environment rules.
+    /// Inherits most env vars but overrides PATH with a safe value.
+    pub fn standard() -> Self {
+        let mut set = std::collections::HashMap::new();
+        set.insert("PATH".to_string(), Self::SAFE_PATH.to_string());
+
+        Self {
+            inherit: true,
+            allowed: HashSet::new(),
+            blocked: Self::default_blocked(),
+            set,
         }
     }
 
@@ -384,17 +406,30 @@ impl EnvironmentRules {
     pub fn default_blocked() -> HashSet<String> {
         let mut blocked = HashSet::new();
         for var in &[
+            // Dynamic linker injection
             "LD_PRELOAD",
             "LD_LIBRARY_PATH",
             "LD_AUDIT",
             "LD_DEBUG",
             "DYLD_INSERT_LIBRARIES",
             "DYLD_LIBRARY_PATH",
+            // Runtime injection
             "NODE_OPTIONS",
+            "NODE_PATH",
             "PYTHONSTARTUP",
             "PYTHONPATH",
+            "PYTHONHOME",
             "RUBYOPT",
+            "RUBYLIB",
             "PERL5OPT",
+            "PERL5LIB",
+            // Shell injection
+            "BASH_ENV",
+            "ENV",
+            "IFS",
+            // Other dangerous
+            "GCONV_PATH",
+            "SSLKEYLOGFILE",
         ] {
             blocked.insert((*var).to_string());
         }
@@ -501,5 +536,33 @@ mod tests {
         let blocked = EnvironmentRules::default_blocked();
         assert!(blocked.contains("LD_PRELOAD"));
         assert!(blocked.contains("NODE_OPTIONS"));
+        assert!(blocked.contains("BASH_ENV"));
+        assert!(blocked.contains("IFS"));
+    }
+
+    #[test]
+    fn test_standard_env_overrides_path() {
+        let env = EnvironmentRules::standard();
+        assert!(env.set.contains_key("PATH"));
+        assert_eq!(env.set["PATH"], EnvironmentRules::SAFE_PATH);
+    }
+
+    #[test]
+    fn test_minimal_env_sets_safe_path() {
+        let env = EnvironmentRules::minimal();
+        assert!(env.set.contains_key("PATH"));
+        assert!(!env.allowed.contains("PATH")); // PATH comes from set, not inherited
+    }
+
+    #[test]
+    fn test_localhost_only_blocks_gateway_port() {
+        let rules = NetworkRules::localhost_only();
+        assert!(rules.blocked_ports.contains(&18789));
+    }
+
+    #[test]
+    fn test_enabled_network_blocks_gateway_port() {
+        let rules = NetworkRules::enabled();
+        assert!(rules.blocked_ports.contains(&18789));
     }
 }
