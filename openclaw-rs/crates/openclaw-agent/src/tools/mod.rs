@@ -13,6 +13,7 @@ mod channel_actions;
 mod context;
 mod diagnostic;
 mod diff;
+mod encoding;
 mod filesystem;
 mod git;
 mod json;
@@ -34,6 +35,7 @@ pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsT
 pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore, SharedContextStore};
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
 pub use diff::{DiffTool, PatchTool};
+pub use encoding::{Base64Tool, HashTool, HexTool, UrlEncodeTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use git::{GitBranchTool, GitDiffTool, GitLogTool, GitStatusTool};
 pub use json::{JsonQueryTool, JsonTransformTool, YamlTool};
@@ -248,6 +250,12 @@ impl ToolRegistry {
         registry.register(Arc::new(JsonQueryTool::new())).await;
         registry.register(Arc::new(JsonTransformTool::new())).await;
         registry.register(Arc::new(YamlTool::new())).await;
+
+        // Encoding/hashing tools
+        registry.register(Arc::new(Base64Tool::new())).await;
+        registry.register(Arc::new(HexTool::new())).await;
+        registry.register(Arc::new(HashTool::new())).await;
+        registry.register(Arc::new(UrlEncodeTool::new())).await;
 
         registry
     }
@@ -512,7 +520,13 @@ mod tests {
         assert!(tools.contains(&"json_transform".to_string()));
         assert!(tools.contains(&"yaml".to_string()));
 
-        // Total: 52 tools
-        assert_eq!(tools.len(), 52);
+        // Check encoding/hashing tools
+        assert!(tools.contains(&"base64".to_string()));
+        assert!(tools.contains(&"hex".to_string()));
+        assert!(tools.contains(&"hash".to_string()));
+        assert!(tools.contains(&"url_encode".to_string()));
+
+        // Total: 56 tools
+        assert_eq!(tools.len(), 56);
     }
 }

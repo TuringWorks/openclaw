@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 52 built-in tools:
+The agent includes 56 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -232,6 +232,12 @@ The agent includes 52 built-in tools:
 - `json_query` - Query JSON data using path expressions
 - `json_transform` - Transform JSON (pick, omit, rename, flatten)
 - `yaml` - Parse and convert between YAML and JSON
+
+### Encoding & Hashing
+- `base64` - Base64 encode/decode
+- `hex` - Hexadecimal encode/decode
+- `hash` - Compute hashes (MD5, SHA1, SHA256, SHA512)
+- `url_encode` - URL encode/decode
 
 ## Gateway RPC Methods
 
