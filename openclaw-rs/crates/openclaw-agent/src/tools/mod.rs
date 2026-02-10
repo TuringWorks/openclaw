@@ -16,8 +16,10 @@ mod context;
 mod diagnostic;
 mod diff;
 mod encoding;
+mod env;
 mod filesystem;
 mod git;
+mod http;
 mod json;
 mod lsp;
 mod math;
@@ -45,8 +47,10 @@ pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
 pub use diff::{DiffTool, PatchTool};
 pub use encoding::{Base64Tool, HashTool, HexTool, UrlEncodeTool};
+pub use env::{EnvCheckTool, EnvGetTool, EnvListTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use git::{GitBranchTool, GitDiffTool, GitLogTool, GitStatusTool};
+pub use http::{HttpRequestTool, UrlBuildTool, UrlParseTool};
 pub use json::{JsonQueryTool, JsonTransformTool, YamlTool};
 pub use lsp::LspTool;
 pub use math::{CalcTool, RandomTool, UuidTool};
@@ -303,6 +307,16 @@ impl ToolRegistry {
         registry.register(Arc::new(PortCheckTool::new())).await;
         registry.register(Arc::new(HttpPingTool::new())).await;
         registry.register(Arc::new(NetInfoTool::new())).await;
+
+        // Environment tools
+        registry.register(Arc::new(EnvGetTool::new())).await;
+        registry.register(Arc::new(EnvListTool::new())).await;
+        registry.register(Arc::new(EnvCheckTool::new())).await;
+
+        // HTTP tools
+        registry.register(Arc::new(HttpRequestTool::new())).await;
+        registry.register(Arc::new(UrlParseTool::new())).await;
+        registry.register(Arc::new(UrlBuildTool::new())).await;
 
         registry
     }
@@ -606,7 +620,17 @@ mod tests {
         assert!(tools.contains(&"http_ping".to_string()));
         assert!(tools.contains(&"net_info".to_string()));
 
-        // Total: 75 tools
-        assert_eq!(tools.len(), 75);
+        // Check environment tools
+        assert!(tools.contains(&"env_get".to_string()));
+        assert!(tools.contains(&"env_list".to_string()));
+        assert!(tools.contains(&"env_check".to_string()));
+
+        // Check HTTP tools
+        assert!(tools.contains(&"http_request".to_string()));
+        assert!(tools.contains(&"url_parse".to_string()));
+        assert!(tools.contains(&"url_build".to_string()));
+
+        // Total: 81 tools
+        assert_eq!(tools.len(), 81);
     }
 }

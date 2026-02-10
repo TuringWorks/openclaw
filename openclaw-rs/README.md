@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 75 built-in tools:
+The agent includes 81 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -154,6 +154,16 @@ The agent includes 75 built-in tools:
 
 ### System
 - `bash` - Execute shell commands
+
+### Environment
+- `env_get` - Get environment variable value
+- `env_list` - List environment variables
+- `env_check` - Check if environment variables exist
+
+### HTTP
+- `http_request` - Make HTTP requests to APIs
+- `url_parse` - Parse URL into components
+- `url_build` - Build URL with query parameters
 
 ### Network
 - `dns_lookup` - DNS record lookup
