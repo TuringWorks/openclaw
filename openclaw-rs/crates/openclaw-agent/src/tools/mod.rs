@@ -12,6 +12,7 @@ mod automation;
 mod browser;
 mod canvas;
 mod channel_actions;
+mod checksum;
 mod context;
 mod diagnostic;
 mod diff;
@@ -34,6 +35,7 @@ mod skill;
 mod string;
 mod system;
 mod tasks;
+mod template;
 mod time;
 mod util;
 mod validate;
@@ -45,6 +47,7 @@ pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
 pub use canvas::CanvasTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
+pub use checksum::{FileChecksumTool, FileVerifyTool};
 pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore, SharedContextStore};
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
 pub use diff::{DiffTool, PatchTool};
@@ -70,6 +73,7 @@ pub use skill::{Skill, SkillListTool, SkillRegistry, SkillTool, SharedSkillRegis
 pub use string::{CaseTool, ReplaceTool, SplitJoinTool, TrimPadTool};
 pub use system::BashTool;
 pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
+pub use template::{FormatTool, TemplateTool};
 pub use time::{DateCalcTool, DateParseTool, NowTool};
 pub use util::{EchoTool, SleepTool, TempDirTool, TempFileTool};
 pub use validate::{IsEmptyTool, ValidateTool};
@@ -331,6 +335,14 @@ impl ToolRegistry {
         registry.register(Arc::new(TempFileTool::new())).await;
         registry.register(Arc::new(TempDirTool::new())).await;
         registry.register(Arc::new(EchoTool::new())).await;
+
+        // Checksum tools
+        registry.register(Arc::new(FileChecksumTool::new())).await;
+        registry.register(Arc::new(FileVerifyTool::new())).await;
+
+        // Template tools
+        registry.register(Arc::new(TemplateTool::new())).await;
+        registry.register(Arc::new(FormatTool::new())).await;
 
         registry
     }
@@ -654,7 +666,15 @@ mod tests {
         assert!(tools.contains(&"temp_dir".to_string()));
         assert!(tools.contains(&"echo".to_string()));
 
-        // Total: 87 tools
-        assert_eq!(tools.len(), 87);
+        // Check checksum tools
+        assert!(tools.contains(&"file_checksum".to_string()));
+        assert!(tools.contains(&"file_verify".to_string()));
+
+        // Check template tools
+        assert!(tools.contains(&"template".to_string()));
+        assert!(tools.contains(&"format".to_string()));
+
+        // Total: 91 tools
+        assert_eq!(tools.len(), 91);
     }
 }
