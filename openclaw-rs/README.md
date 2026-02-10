@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 45 built-in tools:
+The agent includes 52 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -221,6 +221,17 @@ The agent includes 45 built-in tools:
 ### Diff & Patch
 - `diff` - Generate diffs between text or files
 - `patch` - Preview and apply search/replace changes
+
+### Git
+- `git_status` - Get repository status (staged, modified, untracked)
+- `git_log` - View commit history
+- `git_diff` - View changes
+- `git_branch` - List and manage branches
+
+### JSON/YAML
+- `json_query` - Query JSON data using path expressions
+- `json_transform` - Transform JSON (pick, omit, rename, flatten)
+- `yaml` - Parse and convert between YAML and JSON
 
 ## Gateway RPC Methods
 

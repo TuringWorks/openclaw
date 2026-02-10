@@ -14,6 +14,8 @@ mod context;
 mod diagnostic;
 mod diff;
 mod filesystem;
+mod git;
+mod json;
 mod lsp;
 mod media;
 mod memory;
@@ -33,6 +35,8 @@ pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
 pub use diff::{DiffTool, PatchTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
+pub use git::{GitBranchTool, GitDiffTool, GitLogTool, GitStatusTool};
+pub use json::{JsonQueryTool, JsonTransformTool, YamlTool};
 pub use lsp::LspTool;
 pub use media::{ImageTool, TtsTool};
 pub use memory::{MemoryGetTool, MemorySearchTool};
@@ -233,6 +237,17 @@ impl ToolRegistry {
         // Diff tools
         registry.register(Arc::new(DiffTool::default())).await;
         registry.register(Arc::new(PatchTool::default())).await;
+
+        // Git tools
+        registry.register(Arc::new(GitStatusTool::new())).await;
+        registry.register(Arc::new(GitLogTool::new())).await;
+        registry.register(Arc::new(GitDiffTool::new())).await;
+        registry.register(Arc::new(GitBranchTool::new())).await;
+
+        // JSON/YAML tools
+        registry.register(Arc::new(JsonQueryTool::new())).await;
+        registry.register(Arc::new(JsonTransformTool::new())).await;
+        registry.register(Arc::new(YamlTool::new())).await;
 
         registry
     }
@@ -486,7 +501,18 @@ mod tests {
         assert!(tools.contains(&"diff".to_string()));
         assert!(tools.contains(&"patch".to_string()));
 
-        // Total: 45 tools
-        assert_eq!(tools.len(), 45);
+        // Check git tools
+        assert!(tools.contains(&"git_status".to_string()));
+        assert!(tools.contains(&"git_log".to_string()));
+        assert!(tools.contains(&"git_diff".to_string()));
+        assert!(tools.contains(&"git_branch".to_string()));
+
+        // Check JSON/YAML tools
+        assert!(tools.contains(&"json_query".to_string()));
+        assert!(tools.contains(&"json_transform".to_string()));
+        assert!(tools.contains(&"yaml".to_string()));
+
+        // Total: 52 tools
+        assert_eq!(tools.len(), 52);
     }
 }
