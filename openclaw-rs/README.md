@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 40 built-in tools:
+The agent includes 45 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -212,6 +212,15 @@ The agent includes 40 built-in tools:
 - `system_info` - Get system information (OS, architecture, environment)
 - `health_check` - Check agent health and status
 - `diagnostic` - Run diagnostics to troubleshoot issues
+
+### Context Management
+- `context_add` - Add information to working context for later reference
+- `context_get` - Retrieve entries from working context
+- `context_clear` - Clear the working context
+
+### Diff & Patch
+- `diff` - Generate diffs between text or files
+- `patch` - Preview and apply search/replace changes
 
 ## Gateway RPC Methods
 

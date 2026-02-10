@@ -10,7 +10,9 @@ mod ask;
 mod automation;
 mod browser;
 mod channel_actions;
+mod context;
 mod diagnostic;
+mod diff;
 mod filesystem;
 mod lsp;
 mod media;
@@ -27,7 +29,9 @@ pub use ask::{AskUserTool, ConfirmTool};
 pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
+pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore, SharedContextStore};
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
+pub use diff::{DiffTool, PatchTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use lsp::LspTool;
 pub use media::{ImageTool, TtsTool};
@@ -219,6 +223,16 @@ impl ToolRegistry {
         registry.register(Arc::new(SystemInfoTool::new())).await;
         registry.register(Arc::new(HealthCheckTool::new())).await;
         registry.register(Arc::new(DiagnosticTool::new())).await;
+
+        // Context tools (shared store)
+        let context_store = Arc::new(RwLock::new(context::ContextStore::new()));
+        registry.register(Arc::new(ContextAddTool::new(context_store.clone()))).await;
+        registry.register(Arc::new(ContextGetTool::new(context_store.clone()))).await;
+        registry.register(Arc::new(ContextClearTool::new(context_store))).await;
+
+        // Diff tools
+        registry.register(Arc::new(DiffTool::default())).await;
+        registry.register(Arc::new(PatchTool::default())).await;
 
         registry
     }
@@ -463,7 +477,16 @@ mod tests {
         assert!(tools.contains(&"health_check".to_string()));
         assert!(tools.contains(&"diagnostic".to_string()));
 
-        // Total: 40 tools
-        assert_eq!(tools.len(), 40);
+        // Check context tools
+        assert!(tools.contains(&"context_add".to_string()));
+        assert!(tools.contains(&"context_get".to_string()));
+        assert!(tools.contains(&"context_clear".to_string()));
+
+        // Check diff tools
+        assert!(tools.contains(&"diff".to_string()));
+        assert!(tools.contains(&"patch".to_string()));
+
+        // Total: 45 tools
+        assert_eq!(tools.len(), 45);
     }
 }
