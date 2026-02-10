@@ -17,6 +17,7 @@ mod memory;
 mod messaging;
 mod notebook;
 mod plan;
+mod skill;
 mod system;
 mod tasks;
 mod web;
@@ -35,6 +36,7 @@ pub use messaging::{
 };
 pub use notebook::NotebookEditTool;
 pub use plan::{EnterPlanModeTool, ExitPlanModeTool, PlanState, SharedPlanState};
+pub use skill::{Skill, SkillListTool, SkillRegistry, SkillTool, SharedSkillRegistry};
 pub use system::BashTool;
 pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
 pub use web::{WebFetchTool, WebSearchTool};
@@ -205,6 +207,11 @@ impl ToolRegistry {
         let plan_state = Arc::new(tokio::sync::RwLock::new(PlanState::default()));
         registry.register(Arc::new(EnterPlanModeTool::new(plan_state.clone()))).await;
         registry.register(Arc::new(ExitPlanModeTool::new(plan_state))).await;
+
+        // Skill tools (shared registry)
+        let skill_registry = Arc::new(tokio::sync::RwLock::new(SkillRegistry::with_defaults()));
+        registry.register(Arc::new(SkillTool::new(skill_registry.clone()))).await;
+        registry.register(Arc::new(SkillListTool::new(skill_registry))).await;
 
         registry
     }
@@ -440,7 +447,11 @@ mod tests {
         assert!(tools.contains(&"enter_plan_mode".to_string()));
         assert!(tools.contains(&"exit_plan_mode".to_string()));
 
-        // Total: 35 tools
-        assert_eq!(tools.len(), 35);
+        // Check skill tools
+        assert!(tools.contains(&"skill".to_string()));
+        assert!(tools.contains(&"skill_list".to_string()));
+
+        // Total: 37 tools
+        assert_eq!(tools.len(), 37);
     }
 }
