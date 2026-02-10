@@ -29,11 +29,13 @@ mod messaging;
 mod network;
 mod notebook;
 mod plan;
+mod process;
 mod skill;
 mod string;
 mod system;
 mod tasks;
 mod time;
+mod util;
 mod validate;
 mod web;
 
@@ -63,11 +65,13 @@ pub use messaging::{
 pub use network::{DnsLookupTool, HttpPingTool, NetInfoTool, PortCheckTool};
 pub use notebook::NotebookEditTool;
 pub use plan::{EnterPlanModeTool, ExitPlanModeTool, PlanState, SharedPlanState};
+pub use process::{ProcessInfoTool, ProcessListTool};
 pub use skill::{Skill, SkillListTool, SkillRegistry, SkillTool, SharedSkillRegistry};
 pub use string::{CaseTool, ReplaceTool, SplitJoinTool, TrimPadTool};
 pub use system::BashTool;
 pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
 pub use time::{DateCalcTool, DateParseTool, NowTool};
+pub use util::{EchoTool, SleepTool, TempDirTool, TempFileTool};
 pub use validate::{IsEmptyTool, ValidateTool};
 pub use web::{WebFetchTool, WebSearchTool};
 
@@ -317,6 +321,16 @@ impl ToolRegistry {
         registry.register(Arc::new(HttpRequestTool::new())).await;
         registry.register(Arc::new(UrlParseTool::new())).await;
         registry.register(Arc::new(UrlBuildTool::new())).await;
+
+        // Process tools
+        registry.register(Arc::new(ProcessListTool::new())).await;
+        registry.register(Arc::new(ProcessInfoTool::new())).await;
+
+        // Utility tools
+        registry.register(Arc::new(SleepTool::new())).await;
+        registry.register(Arc::new(TempFileTool::new())).await;
+        registry.register(Arc::new(TempDirTool::new())).await;
+        registry.register(Arc::new(EchoTool::new())).await;
 
         registry
     }
@@ -630,7 +644,17 @@ mod tests {
         assert!(tools.contains(&"url_parse".to_string()));
         assert!(tools.contains(&"url_build".to_string()));
 
-        // Total: 81 tools
-        assert_eq!(tools.len(), 81);
+        // Check process tools
+        assert!(tools.contains(&"process_list".to_string()));
+        assert!(tools.contains(&"process_info".to_string()));
+
+        // Check utility tools
+        assert!(tools.contains(&"sleep".to_string()));
+        assert!(tools.contains(&"temp_file".to_string()));
+        assert!(tools.contains(&"temp_dir".to_string()));
+        assert!(tools.contains(&"echo".to_string()));
+
+        // Total: 87 tools
+        assert_eq!(tools.len(), 87);
     }
 }

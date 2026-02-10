@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 81 built-in tools:
+The agent includes 87 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -154,6 +154,16 @@ The agent includes 81 built-in tools:
 
 ### System
 - `bash` - Execute shell commands
+
+### Process
+- `process_list` - List running processes
+- `process_info` - Get current process information
+
+### Utility
+- `sleep` - Wait for a specified duration
+- `temp_file` - Create a temporary file
+- `temp_dir` - Create a temporary directory
+- `echo` - Echo a value back (useful for testing)
 
 ### Environment
 - `env_get` - Get environment variable value
