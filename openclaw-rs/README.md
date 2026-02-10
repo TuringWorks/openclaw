@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 56 built-in tools:
+The agent includes 63 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -238,6 +238,17 @@ The agent includes 56 built-in tools:
 - `hex` - Hexadecimal encode/decode
 - `hash` - Compute hashes (MD5, SHA1, SHA256, SHA512)
 - `url_encode` - URL encode/decode
+
+### Time & Date
+- `now` - Get current date and time
+- `date_parse` - Parse and format date strings
+- `date_calc` - Date calculations (add, subtract, diff)
+
+### String Manipulation
+- `case` - Convert case (upper, lower, camel, snake, kebab)
+- `split_join` - Split and join strings
+- `replace` - Text replacement with regex support
+- `trim_pad` - Trim whitespace or pad strings
 
 ## Gateway RPC Methods
 

@@ -24,8 +24,10 @@ mod messaging;
 mod notebook;
 mod plan;
 mod skill;
+mod string;
 mod system;
 mod tasks;
+mod time;
 mod web;
 
 pub use ask::{AskUserTool, ConfirmTool};
@@ -49,8 +51,10 @@ pub use messaging::{
 pub use notebook::NotebookEditTool;
 pub use plan::{EnterPlanModeTool, ExitPlanModeTool, PlanState, SharedPlanState};
 pub use skill::{Skill, SkillListTool, SkillRegistry, SkillTool, SharedSkillRegistry};
+pub use string::{CaseTool, ReplaceTool, SplitJoinTool, TrimPadTool};
 pub use system::BashTool;
 pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
+pub use time::{DateCalcTool, DateParseTool, NowTool};
 pub use web::{WebFetchTool, WebSearchTool};
 
 use crate::error::AgentError;
@@ -256,6 +260,17 @@ impl ToolRegistry {
         registry.register(Arc::new(HexTool::new())).await;
         registry.register(Arc::new(HashTool::new())).await;
         registry.register(Arc::new(UrlEncodeTool::new())).await;
+
+        // Time tools
+        registry.register(Arc::new(NowTool::new())).await;
+        registry.register(Arc::new(DateParseTool::new())).await;
+        registry.register(Arc::new(DateCalcTool::new())).await;
+
+        // String tools
+        registry.register(Arc::new(CaseTool::new())).await;
+        registry.register(Arc::new(SplitJoinTool::new())).await;
+        registry.register(Arc::new(ReplaceTool::new())).await;
+        registry.register(Arc::new(TrimPadTool::new())).await;
 
         registry
     }
@@ -526,7 +541,18 @@ mod tests {
         assert!(tools.contains(&"hash".to_string()));
         assert!(tools.contains(&"url_encode".to_string()));
 
-        // Total: 56 tools
-        assert_eq!(tools.len(), 56);
+        // Check time tools
+        assert!(tools.contains(&"now".to_string()));
+        assert!(tools.contains(&"date_parse".to_string()));
+        assert!(tools.contains(&"date_calc".to_string()));
+
+        // Check string tools
+        assert!(tools.contains(&"case".to_string()));
+        assert!(tools.contains(&"split_join".to_string()));
+        assert!(tools.contains(&"replace".to_string()));
+        assert!(tools.contains(&"trim_pad".to_string()));
+
+        // Total: 63 tools
+        assert_eq!(tools.len(), 63);
     }
 }
