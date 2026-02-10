@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 91 built-in tools:
+The agent includes 99 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -147,6 +147,12 @@ The agent includes 91 built-in tools:
 - `edit` - Edit files with diff-based changes
 - `glob` - Find files by pattern
 - `grep` - Search file contents
+
+### File Operations
+- `file_copy` - Copy files to a new location
+- `file_move` - Move or rename files
+- `file_stat` - Get file/directory information (size, timestamps, permissions)
+- `file_delete` - Delete files or directories (requires approval)
 
 ### Archive
 - `zip` - Create/extract zip archives
@@ -296,6 +302,12 @@ The agent includes 91 built-in tools:
 ### Validation
 - `validate` - Validate formats (email, URL, JSON, UUID, IP, etc.)
 - `is_empty` - Check if value is empty, null, or blank
+
+### Comparison & Assertions
+- `compare` - Compare two values (eq, ne, lt, gt, contains, starts_with, ends_with)
+- `assert` - Assert a condition is true (returns error if false)
+- `match` - Match text against regex patterns with capture groups
+- `version_compare` - Compare semantic version strings
 
 ## Gateway RPC Methods
 

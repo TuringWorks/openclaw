@@ -13,11 +13,13 @@ mod browser;
 mod canvas;
 mod channel_actions;
 mod checksum;
+mod compare;
 mod context;
 mod diagnostic;
 mod diff;
 mod encoding;
 mod env;
+mod fileops;
 mod filesystem;
 mod git;
 mod http;
@@ -48,11 +50,13 @@ pub use browser::BrowserTool;
 pub use canvas::CanvasTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
 pub use checksum::{FileChecksumTool, FileVerifyTool};
+pub use compare::{AssertTool, CompareTool, MatchTool, VersionCompareTool};
 pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore, SharedContextStore};
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
 pub use diff::{DiffTool, PatchTool};
 pub use encoding::{Base64Tool, HashTool, HexTool, UrlEncodeTool};
 pub use env::{EnvCheckTool, EnvGetTool, EnvListTool};
+pub use fileops::{FileCopyTool, FileDeleteTool, FileMoveTool, FileStatTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use git::{GitBranchTool, GitDiffTool, GitLogTool, GitStatusTool};
 pub use http::{HttpRequestTool, UrlBuildTool, UrlParseTool};
@@ -343,6 +347,18 @@ impl ToolRegistry {
         // Template tools
         registry.register(Arc::new(TemplateTool::new())).await;
         registry.register(Arc::new(FormatTool::new())).await;
+
+        // File operation tools
+        registry.register(Arc::new(FileCopyTool::new())).await;
+        registry.register(Arc::new(FileMoveTool::new())).await;
+        registry.register(Arc::new(FileStatTool::new())).await;
+        registry.register(Arc::new(FileDeleteTool::new())).await;
+
+        // Comparison tools
+        registry.register(Arc::new(CompareTool::new())).await;
+        registry.register(Arc::new(AssertTool::new())).await;
+        registry.register(Arc::new(MatchTool::new())).await;
+        registry.register(Arc::new(VersionCompareTool::new())).await;
 
         registry
     }
@@ -674,7 +690,19 @@ mod tests {
         assert!(tools.contains(&"template".to_string()));
         assert!(tools.contains(&"format".to_string()));
 
-        // Total: 91 tools
-        assert_eq!(tools.len(), 91);
+        // Check file operation tools
+        assert!(tools.contains(&"file_copy".to_string()));
+        assert!(tools.contains(&"file_move".to_string()));
+        assert!(tools.contains(&"file_stat".to_string()));
+        assert!(tools.contains(&"file_delete".to_string()));
+
+        // Check comparison tools
+        assert!(tools.contains(&"compare".to_string()));
+        assert!(tools.contains(&"assert".to_string()));
+        assert!(tools.contains(&"match".to_string()));
+        assert!(tools.contains(&"version_compare".to_string()));
+
+        // Total: 99 tools
+        assert_eq!(tools.len(), 99);
     }
 }
