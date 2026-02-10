@@ -6,6 +6,7 @@
 //! - [`ToolExecutor`] for executing tools with sandboxing
 //! - Built-in tools for file system, execution, and more
 
+mod archive;
 mod ask;
 mod automation;
 mod browser;
@@ -23,6 +24,7 @@ mod math;
 mod media;
 mod memory;
 mod messaging;
+mod network;
 mod notebook;
 mod plan;
 mod skill;
@@ -33,6 +35,7 @@ mod time;
 mod validate;
 mod web;
 
+pub use archive::{TarTool, ZipTool};
 pub use ask::{AskUserTool, ConfirmTool};
 pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
@@ -53,6 +56,7 @@ pub use messaging::{
     MessageTool, SessionStatusTool, SessionsHistoryTool, SessionsListTool, SessionsSendTool,
     SessionsSpawnTool,
 };
+pub use network::{DnsLookupTool, HttpPingTool, NetInfoTool, PortCheckTool};
 pub use notebook::NotebookEditTool;
 pub use plan::{EnterPlanModeTool, ExitPlanModeTool, PlanState, SharedPlanState};
 pub use skill::{Skill, SkillListTool, SkillRegistry, SkillTool, SharedSkillRegistry};
@@ -289,6 +293,16 @@ impl ToolRegistry {
         // Validation tools
         registry.register(Arc::new(ValidateTool::new())).await;
         registry.register(Arc::new(IsEmptyTool::new())).await;
+
+        // Archive tools
+        registry.register(Arc::new(ZipTool::new())).await;
+        registry.register(Arc::new(TarTool::new())).await;
+
+        // Network tools
+        registry.register(Arc::new(DnsLookupTool::new())).await;
+        registry.register(Arc::new(PortCheckTool::new())).await;
+        registry.register(Arc::new(HttpPingTool::new())).await;
+        registry.register(Arc::new(NetInfoTool::new())).await;
 
         registry
     }
@@ -582,7 +596,17 @@ mod tests {
         assert!(tools.contains(&"validate".to_string()));
         assert!(tools.contains(&"is_empty".to_string()));
 
-        // Total: 69 tools
-        assert_eq!(tools.len(), 69);
+        // Check archive tools
+        assert!(tools.contains(&"zip".to_string()));
+        assert!(tools.contains(&"tar".to_string()));
+
+        // Check network tools
+        assert!(tools.contains(&"dns_lookup".to_string()));
+        assert!(tools.contains(&"port_check".to_string()));
+        assert!(tools.contains(&"http_ping".to_string()));
+        assert!(tools.contains(&"net_info".to_string()));
+
+        // Total: 75 tools
+        assert_eq!(tools.len(), 75);
     }
 }

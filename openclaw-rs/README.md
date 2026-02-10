@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 68 built-in tools:
+The agent includes 75 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -148,8 +148,18 @@ The agent includes 68 built-in tools:
 - `glob` - Find files by pattern
 - `grep` - Search file contents
 
+### Archive
+- `zip` - Create/extract zip archives
+- `tar` - Create/extract tar archives (with gzip support)
+
 ### System
 - `bash` - Execute shell commands
+
+### Network
+- `dns_lookup` - DNS record lookup
+- `port_check` - Check TCP port connectivity
+- `http_ping` - Check HTTP/HTTPS endpoint reachability
+- `net_info` - Get network interface information
 
 ### Web
 - `web_fetch` - Fetch and process web pages
