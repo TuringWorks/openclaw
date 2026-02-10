@@ -56,6 +56,9 @@ url = "2.5"
 # Random
 rand = "0.8"
 
+# Platform directories
+dirs = "5.0"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.8"

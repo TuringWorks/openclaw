@@ -10,6 +10,7 @@ mod ask;
 mod automation;
 mod browser;
 mod channel_actions;
+mod diagnostic;
 mod filesystem;
 mod lsp;
 mod media;
@@ -26,6 +27,7 @@ pub use ask::{AskUserTool, ConfirmTool};
 pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
+pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
 pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use lsp::LspTool;
 pub use media::{ImageTool, TtsTool};
@@ -212,6 +214,11 @@ impl ToolRegistry {
         let skill_registry = Arc::new(tokio::sync::RwLock::new(SkillRegistry::with_defaults()));
         registry.register(Arc::new(SkillTool::new(skill_registry.clone()))).await;
         registry.register(Arc::new(SkillListTool::new(skill_registry))).await;
+
+        // Diagnostic tools
+        registry.register(Arc::new(SystemInfoTool::new())).await;
+        registry.register(Arc::new(HealthCheckTool::new())).await;
+        registry.register(Arc::new(DiagnosticTool::new())).await;
 
         registry
     }
@@ -451,7 +458,12 @@ mod tests {
         assert!(tools.contains(&"skill".to_string()));
         assert!(tools.contains(&"skill_list".to_string()));
 
-        // Total: 37 tools
-        assert_eq!(tools.len(), 37);
+        // Check diagnostic tools
+        assert!(tools.contains(&"system_info".to_string()));
+        assert!(tools.contains(&"health_check".to_string()));
+        assert!(tools.contains(&"diagnostic".to_string()));
+
+        // Total: 40 tools
+        assert_eq!(tools.len(), 40);
     }
 }
