@@ -139,7 +139,7 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 
 ## Agent Tools
 
-The agent includes 63 built-in tools:
+The agent includes 68 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -249,6 +249,15 @@ The agent includes 63 built-in tools:
 - `split_join` - Split and join strings
 - `replace` - Text replacement with regex support
 - `trim_pad` - Trim whitespace or pad strings
+
+### Math & Random
+- `calc` - Mathematical calculations (add, sqrt, power, etc.)
+- `random` - Generate random numbers, strings, or pick items
+- `uuid` - Generate UUIDs
+
+### Validation
+- `validate` - Validate formats (email, URL, JSON, UUID, IP, etc.)
+- `is_empty` - Check if value is empty, null, or blank
 
 ## Gateway RPC Methods
 

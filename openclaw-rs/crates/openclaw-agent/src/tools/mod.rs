@@ -9,6 +9,7 @@
 mod ask;
 mod automation;
 mod browser;
+mod canvas;
 mod channel_actions;
 mod context;
 mod diagnostic;
@@ -18,6 +19,7 @@ mod filesystem;
 mod git;
 mod json;
 mod lsp;
+mod math;
 mod media;
 mod memory;
 mod messaging;
@@ -28,11 +30,13 @@ mod string;
 mod system;
 mod tasks;
 mod time;
+mod validate;
 mod web;
 
 pub use ask::{AskUserTool, ConfirmTool};
 pub use automation::{CronTool, GatewayTool, NodesTool};
 pub use browser::BrowserTool;
+pub use canvas::CanvasTool;
 pub use channel_actions::{DiscordActionsTool, SlackActionsTool, TelegramActionsTool};
 pub use context::{ContextAddTool, ContextClearTool, ContextGetTool, ContextStore, SharedContextStore};
 pub use diagnostic::{DiagnosticTool, HealthCheckTool, SystemInfoTool};
@@ -42,6 +46,7 @@ pub use filesystem::{EditTool, GlobTool, GrepTool, ReadTool, WriteTool};
 pub use git::{GitBranchTool, GitDiffTool, GitLogTool, GitStatusTool};
 pub use json::{JsonQueryTool, JsonTransformTool, YamlTool};
 pub use lsp::LspTool;
+pub use math::{CalcTool, RandomTool, UuidTool};
 pub use media::{ImageTool, TtsTool};
 pub use memory::{MemoryGetTool, MemorySearchTool};
 pub use messaging::{
@@ -55,6 +60,7 @@ pub use string::{CaseTool, ReplaceTool, SplitJoinTool, TrimPadTool};
 pub use system::BashTool;
 pub use tasks::{TaskCreateTool, TaskGetTool, TaskListTool, TaskStore, TaskUpdateTool};
 pub use time::{DateCalcTool, DateParseTool, NowTool};
+pub use validate::{IsEmptyTool, ValidateTool};
 pub use web::{WebFetchTool, WebSearchTool};
 
 use crate::error::AgentError;
@@ -197,6 +203,9 @@ impl ToolRegistry {
         // Browser tools
         registry.register(Arc::new(BrowserTool::new())).await;
 
+        // Canvas tools
+        registry.register(Arc::new(CanvasTool::new())).await;
+
         // Channel action tools
         registry.register(Arc::new(TelegramActionsTool::new())).await;
         registry.register(Arc::new(DiscordActionsTool::new())).await;
@@ -271,6 +280,15 @@ impl ToolRegistry {
         registry.register(Arc::new(SplitJoinTool::new())).await;
         registry.register(Arc::new(ReplaceTool::new())).await;
         registry.register(Arc::new(TrimPadTool::new())).await;
+
+        // Math/random tools
+        registry.register(Arc::new(CalcTool::new())).await;
+        registry.register(Arc::new(RandomTool::new())).await;
+        registry.register(Arc::new(UuidTool::new())).await;
+
+        // Validation tools
+        registry.register(Arc::new(ValidateTool::new())).await;
+        registry.register(Arc::new(IsEmptyTool::new())).await;
 
         registry
     }
@@ -481,6 +499,9 @@ mod tests {
         // Check browser tools
         assert!(tools.contains(&"browser".to_string()));
 
+        // Check canvas tools
+        assert!(tools.contains(&"canvas".to_string()));
+
         // Check channel action tools
         assert!(tools.contains(&"telegram_actions".to_string()));
         assert!(tools.contains(&"discord_actions".to_string()));
@@ -552,7 +573,16 @@ mod tests {
         assert!(tools.contains(&"replace".to_string()));
         assert!(tools.contains(&"trim_pad".to_string()));
 
-        // Total: 63 tools
-        assert_eq!(tools.len(), 63);
+        // Check math/random tools
+        assert!(tools.contains(&"calc".to_string()));
+        assert!(tools.contains(&"random".to_string()));
+        assert!(tools.contains(&"uuid".to_string()));
+
+        // Check validation tools
+        assert!(tools.contains(&"validate".to_string()));
+        assert!(tools.contains(&"is_empty".to_string()));
+
+        // Total: 69 tools
+        assert_eq!(tools.len(), 69);
     }
 }
