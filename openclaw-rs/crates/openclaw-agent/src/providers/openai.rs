@@ -277,6 +277,18 @@ impl ModelProvider for OpenAIProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        if self.model.contains("gpt-4o") || self.model.contains("gpt-4-turbo") {
+            128_000
+        } else if self.model.contains("gpt-4") {
+            8_192
+        } else if self.model.contains("gpt-3.5") {
+            16_385
+        } else {
+            128_000 // Default for newer models
+        }
+    }
 }
 
 // API types

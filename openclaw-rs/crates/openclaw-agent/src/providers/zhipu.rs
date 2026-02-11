@@ -249,6 +249,10 @@ impl ModelProvider for ZhipuProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        128_000 // GLM-4 context
+    }
 }
 
 // API types

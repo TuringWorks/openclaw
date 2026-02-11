@@ -259,6 +259,14 @@ impl ModelProvider for QwenProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        if self.model.contains("long") {
+            1_000_000
+        } else {
+            32_000 // Default Qwen context
+        }
+    }
 }
 
 // API types (OpenAI-compatible)

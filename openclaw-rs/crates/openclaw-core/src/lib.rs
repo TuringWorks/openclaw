@@ -16,6 +16,7 @@ pub mod env;
 pub mod id;
 pub mod secret;
 pub mod safety;
+pub mod context;
 
 // Re-exports for convenience
 pub use config::Config;

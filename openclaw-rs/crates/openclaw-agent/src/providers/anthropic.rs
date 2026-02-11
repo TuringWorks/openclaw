@@ -242,6 +242,14 @@ impl ModelProvider for AnthropicProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        if self.model.contains("opus") || self.model.contains("sonnet") || self.model.contains("haiku") {
+            200_000
+        } else {
+            200_000 // Default for Claude models
+        }
+    }
 }
 
 // API types

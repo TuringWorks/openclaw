@@ -313,6 +313,10 @@ impl ModelProvider for OpenRouterProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        128_000 // Conservative default; actual varies by routed model
+    }
 }
 
 // API types (OpenAI-compatible format)

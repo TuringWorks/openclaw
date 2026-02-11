@@ -164,6 +164,21 @@ impl Session {
     pub fn archive(&mut self) {
         self.state = SessionState::Archived;
     }
+
+    /// Apply compaction to the session's messages.
+    ///
+    /// Replaces the current message history with the compacted version
+    /// and logs the compaction event.
+    pub fn apply_compaction(&mut self, new_messages: Vec<Message>, messages_removed: usize) {
+        tracing::info!(
+            session = %self.key.as_str(),
+            removed = messages_removed,
+            remaining = new_messages.len(),
+            "Applied context compaction"
+        );
+        self.messages = new_messages;
+        self.last_activity = Utc::now();
+    }
 }
 
 /// Manager for session persistence and lifecycle.

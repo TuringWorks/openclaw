@@ -250,6 +250,16 @@ impl ModelProvider for MoonshotProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        if self.model.contains("128k") {
+            128_000
+        } else if self.model.contains("32k") {
+            32_000
+        } else {
+            8_000
+        }
+    }
 }
 
 // API types (OpenAI-compatible)

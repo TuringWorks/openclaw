@@ -253,6 +253,14 @@ impl ModelProvider for DeepSeekProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        if self.model.contains("reasoner") {
+            64_000
+        } else {
+            64_000 // DeepSeek-V3 context
+        }
+    }
 }
 
 // API types (OpenAI-compatible)

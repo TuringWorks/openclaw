@@ -289,6 +289,10 @@ impl ModelProvider for OllamaProvider {
             Err(AgentError::provider("Streaming not yet implemented"))
         }))
     }
+
+    fn context_limit(&self) -> usize {
+        32_000 // Default for local models
+    }
 }
 
 // API types

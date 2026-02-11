@@ -91,6 +91,11 @@ pub trait ModelProvider: Send + Sync {
         messages: &[Message],
         tools: &[ToolDefinition],
     ) -> Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send + '_>>;
+
+    /// Get the context window size for this model (in tokens).
+    fn context_limit(&self) -> usize {
+        100_000 // Conservative default
+    }
 }
 
 pub use anthropic::AnthropicProvider;

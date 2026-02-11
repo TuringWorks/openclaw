@@ -1,6 +1,9 @@
 //! OpenClaw command-line interface.
 
 pub mod commands;
+pub mod onboard;
+pub mod render;
+pub mod repl;
 
 use clap::{Parser, Subcommand};
 
@@ -42,6 +45,13 @@ pub enum Commands {
     /// Manage encrypted secrets
     Secrets(commands::secrets::SecretsArgs),
 
+    /// Initialize OpenClaw configuration
+    Init {
+        /// Overwrite existing configuration
+        #[arg(long)]
+        force: bool,
+    },
+
     /// Show version information
     Version,
 }
@@ -55,6 +65,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Config(args) => commands::config::run(args).await,
         Commands::Doctor(args) => commands::doctor::run(args).await,
         Commands::Secrets(args) => commands::secrets::run(args).await,
+        Commands::Init { force } => {
+            onboard::OnboardWizard::new(force).run().await
+        }
         Commands::Version => {
             println!("openclaw {}", env!("CARGO_PKG_VERSION"));
             Ok(())
