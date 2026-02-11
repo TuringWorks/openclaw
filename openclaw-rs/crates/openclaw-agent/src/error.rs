@@ -165,3 +165,9 @@ impl From<openclaw_channels::ChannelError> for AgentError {
         Self::Channel(e.to_string())
     }
 }
+
+impl From<openclaw_core::error::SecurityError> for AgentError {
+    fn from(e: openclaw_core::error::SecurityError) -> Self {
+        Self::ToolExecution(e.to_string())
+    }
+}

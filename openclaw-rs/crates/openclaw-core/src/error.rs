@@ -73,6 +73,18 @@ pub enum SecurityError {
 
     #[error("Approval timeout")]
     ApprovalTimeout,
+
+    #[error("Prompt injection detected: {pattern}")]
+    InjectionDetected { pattern: String, severity: String },
+
+    #[error("Secret leak detected: {pattern_name}")]
+    LeakDetected { pattern_name: String, action: String },
+
+    #[error("Input validation failed: {reason}")]
+    InputValidation { reason: String },
+
+    #[error("Safety policy violation: {rule}")]
+    PolicyViolation { rule: String, severity: String },
 }
 
 /// Channel-related errors.

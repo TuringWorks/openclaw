@@ -39,6 +39,9 @@ pub enum Commands {
     /// Run diagnostics
     Doctor(commands::doctor::DoctorArgs),
 
+    /// Manage encrypted secrets
+    Secrets(commands::secrets::SecretsArgs),
+
     /// Show version information
     Version,
 }
@@ -51,6 +54,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Channels(args) => commands::channels::run(args).await,
         Commands::Config(args) => commands::config::run(args).await,
         Commands::Doctor(args) => commands::doctor::run(args).await,
+        Commands::Secrets(args) => commands::secrets::run(args).await,
         Commands::Version => {
             println!("openclaw {}", env!("CARGO_PKG_VERSION"));
             Ok(())

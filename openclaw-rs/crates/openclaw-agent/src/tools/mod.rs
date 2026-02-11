@@ -86,6 +86,7 @@ pub use web::{WebFetchTool, WebSearchTool};
 use crate::error::AgentError;
 use crate::Result;
 use async_trait::async_trait;
+use openclaw_core::safety::SafetyLayer;
 use openclaw_core::types::{ToolDefinition, ToolGroup, ToolResult};
 use openclaw_sandbox::{CommandExecutor, ExecutionContext, SandboxProfile};
 use std::collections::HashMap;
@@ -422,7 +423,7 @@ impl ToolRegistry {
     }
 }
 
-/// Tool executor with sandbox support.
+/// Tool executor with sandbox support and safety layer.
 pub struct ToolExecutor {
     /// Tool registry.
     registry: Arc<ToolRegistry>,
@@ -432,6 +433,9 @@ pub struct ToolExecutor {
 
     /// Command executor for shell tools.
     command_executor: Option<CommandExecutor>,
+
+    /// Safety layer for input/output validation.
+    safety: Option<SafetyLayer>,
 }
 
 impl ToolExecutor {
@@ -441,6 +445,7 @@ impl ToolExecutor {
             registry,
             default_context: ToolContext::default(),
             command_executor: None,
+            safety: None,
         }
     }
 
@@ -456,6 +461,12 @@ impl ToolExecutor {
             .with_profile(profile)
             .with_envs(self.default_context.env.clone());
         self.command_executor = Some(CommandExecutor::new(exec_context));
+        self
+    }
+
+    /// Enable the safety layer for input/output validation.
+    pub fn with_safety(mut self, layer: SafetyLayer) -> Self {
+        self.safety = Some(layer);
         self
     }
 
@@ -475,8 +486,24 @@ impl ToolExecutor {
 
         let ctx = context.unwrap_or(&self.default_context);
 
+        // Pre-execution: validate and scan args
+        if let Some(ref safety) = self.safety {
+            safety.check_input(name, &args)?;
+        }
+
         debug!("Executing tool '{}' with args: {:?}", name, args);
-        tool.execute(tool_use_id, args, ctx).await
+        let result = tool.execute(tool_use_id, args, ctx).await?;
+
+        // Post-execution: scan output for leaks, wrap in XML
+        if let Some(ref safety) = self.safety {
+            let cleaned_output = safety.check_output(name, &result.output)?;
+            return Ok(ToolResult {
+                output: cleaned_output,
+                ..result
+            });
+        }
+
+        Ok(result)
     }
 
     /// Check if a tool requires approval.
