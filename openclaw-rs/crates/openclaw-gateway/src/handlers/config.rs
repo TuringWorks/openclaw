@@ -2,6 +2,7 @@
 
 use super::HandlerContext;
 use crate::error::GatewayError;
+use crate::handlers::exec::persist_config;
 use crate::methods::MethodHandler;
 use crate::Result;
 use async_trait::async_trait;
@@ -101,6 +102,11 @@ impl MethodHandler for ConfigSetHandler {
         let mut config_value = config.write().await;
         set_nested_value(&mut config_value, &params.key, params.value.clone());
 
+        // Persist to disk if a config path is configured.
+        if let Some(ref path) = self.context.config_path {
+            persist_config(&config_value, path).await?;
+        }
+
         Ok(serde_json::json!({
             "key": params.key,
             "value": params.value,
@@ -145,6 +151,11 @@ impl MethodHandler for ConfigPatchHandler {
 
         let mut config_value = config.write().await;
         json_merge_patch(&mut config_value, &params.patch);
+
+        // Persist to disk if a config path is configured.
+        if let Some(ref path) = self.context.config_path {
+            persist_config(&config_value, path).await?;
+        }
 
         Ok(serde_json::json!({
             "patched": true,

@@ -64,7 +64,7 @@ pub use json::{JsonQueryTool, JsonTransformTool, YamlTool};
 pub use lsp::LspTool;
 pub use math::{CalcTool, RandomTool, UuidTool};
 pub use media::{ImageTool, TtsTool};
-pub use memory::{MemoryGetTool, MemorySearchTool};
+pub use memory::{MemoryGetTool, MemoryIndexTool, MemorySearchTool, MemoryStoreTool};
 pub use messaging::{
     MessageTool, SessionStatusTool, SessionsHistoryTool, SessionsListTool, SessionsSendTool,
     SessionsSpawnTool,
@@ -83,6 +83,9 @@ pub use util::{EchoTool, SleepTool, TempDirTool, TempFileTool};
 pub use validate::{IsEmptyTool, ValidateTool};
 pub use web::{WebFetchTool, WebSearchTool};
 
+// Plugin adapter (bridges plugin SDK tools into the agent runtime)
+// Note: PluginToolAdapter is defined inline below, not in a submodule.
+
 use crate::error::AgentError;
 use crate::Result;
 use async_trait::async_trait;
@@ -94,6 +97,59 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::debug;
+
+/// Adapter that wraps a plugin tool to implement the agent `Tool` trait.
+///
+/// This bridges the plugin SDK's `PluginTool` interface with the agent runtime's
+/// `Tool` interface, mapping between `ToolContext` and `ToolExecutionContext`.
+pub struct PluginToolAdapter {
+    inner: Arc<dyn openclaw_plugin_sdk::PluginTool>,
+}
+
+impl PluginToolAdapter {
+    /// Create a new adapter wrapping a plugin tool.
+    pub fn new(tool: Arc<dyn openclaw_plugin_sdk::PluginTool>) -> Self {
+        Self { inner: tool }
+    }
+}
+
+#[async_trait]
+impl Tool for PluginToolAdapter {
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    fn definition(&self) -> ToolDefinition {
+        self.inner.definition()
+    }
+
+    async fn execute(
+        &self,
+        tool_use_id: &str,
+        args: serde_json::Value,
+        context: &ToolContext,
+    ) -> Result<ToolResult> {
+        let exec_ctx = openclaw_plugin_sdk::ToolExecutionContext {
+            cwd: context.cwd.clone(),
+            env: context.env.clone(),
+            session_id: context.session_id.clone(),
+            agent_id: context.agent_id.clone(),
+            data: context.data.clone(),
+        };
+        self.inner
+            .execute(tool_use_id, args, &exec_ctx)
+            .await
+            .map_err(|e| AgentError::tool_execution(e.to_string()))
+    }
+
+    fn requires_approval(&self, args: &serde_json::Value) -> bool {
+        self.inner.requires_approval(args)
+    }
+
+    fn group(&self) -> ToolGroup {
+        self.inner.group()
+    }
+}
 
 /// A tool that can be executed by an agent.
 #[async_trait]
@@ -211,6 +267,8 @@ impl ToolRegistry {
         // Memory tools
         registry.register(Arc::new(MemorySearchTool::new())).await;
         registry.register(Arc::new(MemoryGetTool::new())).await;
+        registry.register(Arc::new(MemoryStoreTool::new())).await;
+        registry.register(Arc::new(MemoryIndexTool::new())).await;
 
         // Automation tools
         registry.register(Arc::new(CronTool::new())).await;
@@ -421,6 +479,23 @@ impl ToolRegistry {
             .map(|t| t.definition())
             .collect()
     }
+
+    /// Register tools from a plugin loader.
+    ///
+    /// Iterates over all loaded plugins that implement the `ToolPlugin` trait
+    /// and registers each of their tools via a `PluginToolAdapter`.
+    pub async fn register_plugin_tools(&self, loader: &openclaw_plugin_sdk::PluginLoader) {
+        for plugin_meta in loader.list() {
+            if let Some(plugin) = loader.get(&plugin_meta.name) {
+                if let Some(tool_plugin) = plugin.as_tool_plugin() {
+                    for tool in tool_plugin.tools() {
+                        tracing::info!("Registered plugin tool: {}", tool.name());
+                        self.register(Arc::new(PluginToolAdapter::new(tool))).await;
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Tool executor with sandbox support and safety layer.
@@ -583,6 +658,8 @@ mod tests {
         // Check memory tools
         assert!(tools.contains(&"memory_search".to_string()));
         assert!(tools.contains(&"memory_get".to_string()));
+        assert!(tools.contains(&"memory_store".to_string()));
+        assert!(tools.contains(&"memory_index".to_string()));
 
         // Check automation tools
         assert!(tools.contains(&"cron".to_string()));
@@ -729,7 +806,7 @@ mod tests {
         assert!(tools.contains(&"match".to_string()));
         assert!(tools.contains(&"version_compare".to_string()));
 
-        // Total: 99 tools
-        assert_eq!(tools.len(), 99);
+        // Total: 101 tools
+        assert_eq!(tools.len(), 101);
     }
 }

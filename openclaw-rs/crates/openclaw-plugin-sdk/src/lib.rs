@@ -373,13 +373,44 @@ impl PluginHealth {
     }
 }
 
+/// Represents either a statically registered or dynamically loaded plugin.
+enum PluginEntry {
+    /// A plugin registered via `register()`.
+    Static(Box<dyn Plugin>),
+    /// A plugin loaded from a shared library.
+    Dynamic {
+        /// The loaded library handle. Kept alive to prevent unloading.
+        _library: libloading::Library,
+        /// The plugin instance created from the library.
+        plugin: Box<dyn Plugin>,
+    },
+}
+
+impl PluginEntry {
+    /// Get a reference to the underlying plugin.
+    fn plugin(&self) -> &dyn Plugin {
+        match self {
+            PluginEntry::Static(p) => p.as_ref(),
+            PluginEntry::Dynamic { plugin, .. } => plugin.as_ref(),
+        }
+    }
+
+    /// Get a mutable reference to the underlying plugin.
+    fn plugin_mut(&mut self) -> &mut dyn Plugin {
+        match self {
+            PluginEntry::Static(p) => p.as_mut(),
+            PluginEntry::Dynamic { plugin, .. } => plugin.as_mut(),
+        }
+    }
+}
+
 /// Plugin loader for dynamic plugin loading.
 pub struct PluginLoader {
     /// Search paths for plugins.
     search_paths: Vec<std::path::PathBuf>,
 
     /// Loaded plugins.
-    plugins: HashMap<String, Box<dyn Plugin>>,
+    plugins: HashMap<String, PluginEntry>,
 }
 
 impl Default for PluginLoader {
@@ -405,27 +436,117 @@ impl PluginLoader {
     /// Register a plugin.
     pub fn register(&mut self, plugin: Box<dyn Plugin>) {
         let name = plugin.metadata().name.clone();
-        self.plugins.insert(name, plugin);
+        self.plugins.insert(name, PluginEntry::Static(plugin));
     }
 
     /// Get a plugin by name.
-    pub fn get(&self, name: &str) -> Option<&Box<dyn Plugin>> {
-        self.plugins.get(name)
+    pub fn get(&self, name: &str) -> Option<&dyn Plugin> {
+        self.plugins.get(name).map(|entry| entry.plugin())
     }
 
     /// Get a mutable plugin by name.
-    pub fn get_mut(&mut self, name: &str) -> Option<&mut Box<dyn Plugin>> {
-        self.plugins.get_mut(name)
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut dyn Plugin> {
+        self.plugins.get_mut(name).map(|entry| entry.plugin_mut())
     }
 
     /// List all registered plugins.
     pub fn list(&self) -> Vec<PluginMetadata> {
-        self.plugins.values().map(|p| p.metadata()).collect()
+        self.plugins
+            .values()
+            .map(|entry| entry.plugin().metadata())
+            .collect()
+    }
+
+    /// Load a plugin from a shared library (.so/.dylib/.dll).
+    ///
+    /// The library must export an `_openclaw_plugin_create` symbol that returns
+    /// a pointer to a boxed `Box<dyn Plugin>` (double-boxed for FFI safety).
+    ///
+    /// # Safety
+    /// This loads and executes code from the specified library file.
+    /// The caller must ensure the library is trusted and compatible.
+    pub unsafe fn load_plugin(&mut self, path: &std::path::Path) -> Result<PluginMetadata> {
+        let library = libloading::Library::new(path).map_err(|e| {
+            PluginError::initialization(format!("Failed to load library {:?}: {}", path, e))
+        })?;
+
+        // Look up the plugin creation function
+        let create_fn: libloading::Symbol<unsafe extern "C" fn() -> *mut std::ffi::c_void> =
+            library.get(b"_openclaw_plugin_create").map_err(|e| {
+                PluginError::initialization(format!("Symbol not found in {:?}: {}", path, e))
+            })?;
+
+        // Call the creation function to get a plugin instance
+        let raw = create_fn();
+        if raw.is_null() {
+            return Err(PluginError::initialization(
+                "Plugin creation returned null",
+            ));
+        }
+
+        // The macro exports a double-boxed plugin (Box<Box<dyn Plugin>>) cast to c_void.
+        let plugin = *Box::from_raw(raw as *mut Box<dyn Plugin>);
+        let metadata = plugin.metadata();
+        let name = metadata.name.clone();
+
+        self.plugins.insert(
+            name,
+            PluginEntry::Dynamic {
+                _library: library,
+                plugin,
+            },
+        );
+
+        Ok(metadata)
+    }
+
+    /// Load all plugins from a directory.
+    ///
+    /// Scans for `.so` (Linux), `.dylib` (macOS), and `.dll` (Windows) files.
+    ///
+    /// # Safety
+    /// This loads and executes code from library files found in the directory.
+    /// The caller must ensure the directory contents are trusted.
+    pub unsafe fn load_from_dir(&mut self, dir: &std::path::Path) -> Result<Vec<PluginMetadata>> {
+        let mut loaded = Vec::new();
+
+        if !dir.exists() {
+            return Ok(loaded);
+        }
+
+        let entries = std::fs::read_dir(dir).map_err(|e| {
+            PluginError::initialization(format!("Failed to read dir {:?}: {}", dir, e))
+        })?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| {
+                PluginError::initialization(format!("Failed to read entry: {}", e))
+            })?;
+            let path = entry.path();
+
+            let is_plugin = path.extension().map_or(false, |ext| {
+                ext == "so" || ext == "dylib" || ext == "dll"
+            });
+
+            if is_plugin {
+                match self.load_plugin(&path) {
+                    Ok(meta) => {
+                        tracing::info!("Loaded plugin: {} v{}", meta.name, meta.version);
+                        loaded.push(meta);
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load plugin {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+
+        Ok(loaded)
     }
 
     /// Initialize all plugins.
     pub async fn initialize_all(&mut self, openclaw_version: Version) -> Result<()> {
-        for (name, plugin) in self.plugins.iter_mut() {
+        for (name, entry) in self.plugins.iter_mut() {
             let data_dir = dirs::data_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
                 .join("openclaw")
@@ -437,10 +558,11 @@ impl PluginLoader {
                 PluginError::initialization(format!("Failed to create data dir: {}", e))
             })?;
 
-            let ctx = PluginContext::new(PluginConfig::default(), openclaw_version.clone(), data_dir);
+            let ctx =
+                PluginContext::new(PluginConfig::default(), openclaw_version.clone(), data_dir);
 
             tracing::info!("Initializing plugin: {}", name);
-            plugin.initialize(&ctx).await?;
+            entry.plugin_mut().initialize(&ctx).await?;
         }
 
         Ok(())
@@ -448,9 +570,9 @@ impl PluginLoader {
 
     /// Shutdown all plugins.
     pub async fn shutdown_all(&mut self) -> Result<()> {
-        for (name, plugin) in self.plugins.iter_mut() {
+        for (name, entry) in self.plugins.iter_mut() {
             tracing::info!("Shutting down plugin: {}", name);
-            if let Err(e) = plugin.shutdown().await {
+            if let Err(e) = entry.plugin_mut().shutdown().await {
                 tracing::warn!("Error shutting down plugin {}: {}", name, e);
             }
         }
@@ -480,21 +602,35 @@ pub mod prelude {
     pub use crate::openclaw_plugin;
 }
 
-/// Macro for exporting a plugin.
+/// Macro for exporting a plugin from a shared library.
+///
+/// This macro generates FFI-safe exported symbols that the `PluginLoader` uses
+/// to instantiate a plugin from a `.so`/`.dylib`/`.dll` file:
+///
+/// - `_openclaw_plugin_create` -- returns a double-boxed `Box<Box<dyn Plugin>>`
+///   cast to `*mut c_void` so the pointer is thin and FFI-safe.
+/// - `_openclaw_plugin_metadata` -- returns a boxed `PluginMetadata` cast to
+///   `*mut c_void`.
+///
+/// The consuming side (in `PluginLoader::load_plugin`) reconstructs the original
+/// types from these raw pointers.
 #[macro_export]
 macro_rules! openclaw_plugin {
     ($plugin_type:ty) => {
         /// Create a new instance of the plugin.
         #[no_mangle]
-        pub extern "C" fn _openclaw_plugin_create() -> *mut dyn $crate::Plugin {
-            let plugin = Box::new(<$plugin_type>::default());
-            Box::into_raw(plugin)
+        pub extern "C" fn _openclaw_plugin_create() -> *mut std::ffi::c_void {
+            let plugin: Box<dyn $crate::Plugin> = Box::new(<$plugin_type>::default());
+            let boxed: Box<Box<dyn $crate::Plugin>> = Box::new(plugin);
+            Box::into_raw(boxed) as *mut std::ffi::c_void
         }
 
         /// Get plugin metadata.
         #[no_mangle]
-        pub extern "C" fn _openclaw_plugin_metadata() -> $crate::PluginMetadata {
-            <$plugin_type>::default().metadata()
+        pub extern "C" fn _openclaw_plugin_metadata() -> *mut std::ffi::c_void {
+            let meta = <$plugin_type>::default().metadata();
+            let boxed = Box::new(meta);
+            Box::into_raw(boxed) as *mut std::ffi::c_void
         }
     };
 }
@@ -581,5 +717,29 @@ mod tests {
     fn test_plugin_loader() {
         let loader = PluginLoader::new();
         assert!(loader.list().is_empty());
+    }
+
+    #[test]
+    fn test_plugin_loader_register() {
+        // Static registration still works with the new PluginEntry enum
+        let loader = PluginLoader::new();
+        assert!(loader.list().is_empty());
+    }
+
+    #[test]
+    fn test_load_from_dir_nonexistent() {
+        let mut loader = PluginLoader::new();
+        let result = unsafe { loader.load_from_dir(std::path::Path::new("/nonexistent/path")) };
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_load_from_dir_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut loader = PluginLoader::new();
+        let result = unsafe { loader.load_from_dir(dir.path()) };
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 }

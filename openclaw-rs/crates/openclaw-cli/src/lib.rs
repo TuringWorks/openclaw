@@ -45,6 +45,9 @@ pub enum Commands {
     /// Manage encrypted secrets
     Secrets(commands::secrets::SecretsArgs),
 
+    /// Manage plugins
+    Plugins(commands::plugins::PluginsArgs),
+
     /// Initialize OpenClaw configuration
     Init {
         /// Overwrite existing configuration
@@ -65,6 +68,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Config(args) => commands::config::run(args).await,
         Commands::Doctor(args) => commands::doctor::run(args).await,
         Commands::Secrets(args) => commands::secrets::run(args).await,
+        Commands::Plugins(args) => commands::plugins::run(args).await,
         Commands::Init { force } => {
             onboard::OnboardWizard::new(force).run().await
         }

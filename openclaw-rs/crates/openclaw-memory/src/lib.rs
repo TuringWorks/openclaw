@@ -12,7 +12,7 @@ pub mod search;
 
 pub use error::MemoryError;
 pub use embeddings::{EmbeddingProvider, OpenAIEmbeddings};
-pub use store::{VectorStore, MemoryVectorStore};
+pub use store::{VectorStore, MemoryVectorStore, FileVectorStore};
 pub use search::{SearchQuery, SearchResult};
 
 /// Result type for memory operations.

@@ -26,15 +26,16 @@ pub use chat::{ChatAbortHandler, ChatHandler, ChatHistoryHandler};
 pub use config::{ConfigGetHandler, ConfigPatchHandler, ConfigSchemaHandler, ConfigSetHandler};
 pub use cron::{
     CronAddHandler, CronListHandler, CronRemoveHandler, CronRunHandler, CronRunsHandler,
-    CronStatusHandler, CronUpdateHandler, WakeHandler,
+    CronScheduler, CronStatusHandler, CronUpdateHandler, WakeHandler,
 };
 pub use device::{
     DevicePairApproveHandler, DevicePairListHandler, DevicePairRejectHandler,
     DeviceTokenRevokeHandler, DeviceTokenRotateHandler,
 };
 pub use exec::{
-    ExecApprovalRequestHandler, ExecApprovalResolveHandler, ExecApprovalsGetHandler,
-    ExecApprovalsNodeGetHandler, ExecApprovalsNodeSetHandler, ExecApprovalsSetHandler,
+    ApprovalQueue, ExecApprovalRequestHandler, ExecApprovalResolveHandler,
+    ExecApprovalsGetHandler, ExecApprovalsNodeGetHandler, ExecApprovalsNodeSetHandler,
+    ExecApprovalsSetHandler,
 };
 pub use health::{HealthHandler, StatusHandler};
 pub use models::ModelsListHandler;
@@ -277,6 +278,15 @@ pub struct HandlerContext {
 
     /// Default model to use.
     pub default_model: String,
+
+    /// Approval queue for exec approval requests.
+    pub approval_queue: Arc<ApprovalQueue>,
+
+    /// Cron job scheduler.
+    pub cron_scheduler: Arc<CronScheduler>,
+
+    /// Path to config file for persistence.
+    pub config_path: Option<std::path::PathBuf>,
 }
 
 impl Default for HandlerContext {
@@ -287,6 +297,9 @@ impl Default for HandlerContext {
             active_channels: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             provider: None,
             default_model: "claude-sonnet-4-20250514".to_string(),
+            approval_queue: Arc::new(ApprovalQueue::new()),
+            cron_scheduler: Arc::new(CronScheduler::new()),
+            config_path: None,
         }
     }
 }
@@ -323,6 +336,12 @@ impl HandlerContext {
     /// Set the default model.
     pub fn with_default_model(mut self, model: impl Into<String>) -> Self {
         self.default_model = model.into();
+        self
+    }
+
+    /// Set the config file path for persistence.
+    pub fn with_config_path(mut self, path: std::path::PathBuf) -> Self {
+        self.config_path = Some(path);
         self
     }
 }

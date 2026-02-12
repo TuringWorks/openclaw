@@ -16,6 +16,7 @@ openclaw-gateway = { path = "../openclaw-gateway" }
 openclaw-channels = { path = "../openclaw-channels" }
 openclaw-providers = { path = "../openclaw-providers", features = ["anthropic", "openai", "google"] }
 openclaw-secrets = { path = "../openclaw-secrets" }
+openclaw-plugin-sdk = { path = "../openclaw-plugin-sdk" }
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }

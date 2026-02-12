@@ -11,6 +11,7 @@ openclaw-core = { path = "../openclaw-core" }
 openclaw-sandbox = { path = "../openclaw-sandbox" }
 openclaw-channels = { path = "../openclaw-channels" }
 openclaw-memory = { path = "../openclaw-memory" }
+openclaw-plugin-sdk = { path = "../openclaw-plugin-sdk" }
 
 # Async runtime
 tokio = { version = "1.35", features = ["full", "sync", "time"] }
@@ -78,6 +79,9 @@ flate2 = "1.0"
 # Network
 hostname = "0.4"
 
+# Browser automation (optional)
+chromiumoxide = { version = "0.7", optional = true, default-features = false, features = ["tokio-runtime"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.8"
@@ -85,3 +89,4 @@ mockall = "0.12"
 
 [features]
 default = []
+browser = ["dep:chromiumoxide"]
