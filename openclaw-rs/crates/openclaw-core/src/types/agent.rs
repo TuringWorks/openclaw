@@ -338,3 +338,133 @@ impl Workspace {
 fn default_true() -> bool {
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_agent_config_default_fields() {
+        let config = AgentConfig::default();
+        assert_eq!(config.id.as_str(), "default");
+        assert!(config.name.is_none());
+        assert!(config.workspace_dir.is_none());
+        assert!(config.model.is_none());
+        assert!(config.fallback_models.is_empty());
+        assert!(config.system_prompt.is_none());
+        assert_eq!(config.thinking_level, ThinkingLevel::Low);
+        assert!(config.sandbox.is_none());
+        assert!(config.identity.is_none());
+    }
+
+    #[test]
+    fn test_thinking_level_budget_tokens() {
+        assert_eq!(ThinkingLevel::Off.budget_tokens(), None);
+        assert_eq!(ThinkingLevel::Minimal.budget_tokens(), Some(1024));
+        assert_eq!(ThinkingLevel::Low.budget_tokens(), Some(4096));
+        assert_eq!(ThinkingLevel::Medium.budget_tokens(), Some(8192));
+        assert_eq!(ThinkingLevel::High.budget_tokens(), Some(16384));
+        assert_eq!(ThinkingLevel::XHigh.budget_tokens(), Some(32768));
+    }
+
+    #[test]
+    fn test_thinking_level_is_enabled() {
+        assert!(!ThinkingLevel::Off.is_enabled());
+        assert!(ThinkingLevel::Minimal.is_enabled());
+        assert!(ThinkingLevel::Low.is_enabled());
+        assert!(ThinkingLevel::Medium.is_enabled());
+        assert!(ThinkingLevel::High.is_enabled());
+        assert!(ThinkingLevel::XHigh.is_enabled());
+    }
+
+    #[test]
+    fn test_thinking_level_default_is_low() {
+        assert_eq!(ThinkingLevel::default(), ThinkingLevel::Low);
+    }
+
+    #[test]
+    fn test_tool_profile_included_tools_minimal() {
+        let tools = ToolProfile::Minimal.included_tools();
+        assert_eq!(tools, &["session_status"]);
+    }
+
+    #[test]
+    fn test_tool_profile_included_tools_coding() {
+        let tools = ToolProfile::Coding.included_tools();
+        assert!(tools.contains(&"read"));
+        assert!(tools.contains(&"write"));
+        assert!(tools.contains(&"exec"));
+        assert!(tools.contains(&"memory_search"));
+    }
+
+    #[test]
+    fn test_tool_profile_included_tools_messaging() {
+        let tools = ToolProfile::Messaging.included_tools();
+        assert!(tools.contains(&"message"));
+        assert!(tools.contains(&"sessions_list"));
+        assert!(tools.contains(&"sessions_send"));
+    }
+
+    #[test]
+    fn test_tool_profile_full_returns_empty_slice() {
+        // Full profile returns empty slice because all tools are allowed.
+        let tools = ToolProfile::Full.included_tools();
+        assert!(tools.is_empty());
+    }
+
+    #[test]
+    fn test_tool_profile_allows_all() {
+        assert!(ToolProfile::Full.allows_all());
+        assert!(!ToolProfile::Minimal.allows_all());
+        assert!(!ToolProfile::Coding.allows_all());
+        assert!(!ToolProfile::Messaging.allows_all());
+    }
+
+    #[test]
+    fn test_sandbox_profile_serde_roundtrip() {
+        let profiles = [
+            SandboxProfile::Strict,
+            SandboxProfile::Standard,
+            SandboxProfile::Trusted,
+            SandboxProfile::None,
+        ];
+        for profile in &profiles {
+            let json = serde_json::to_string(profile).unwrap();
+            let parsed: SandboxProfile = serde_json::from_str(&json).unwrap();
+            assert_eq!(*profile, parsed);
+        }
+    }
+
+    #[test]
+    fn test_resource_limits_default() {
+        let limits = ResourceLimits::default();
+        assert_eq!(limits.max_cpu_seconds, 30);
+        assert_eq!(limits.max_memory_bytes, 512 * 1024 * 1024);
+        assert_eq!(limits.max_processes, 10);
+        assert_eq!(limits.max_open_files, 100);
+        assert_eq!(limits.max_output_bytes, 1024 * 1024);
+    }
+
+    #[test]
+    fn test_agent_config_serde_roundtrip() {
+        let config = AgentConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let parsed: AgentConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id.as_str(), config.id.as_str());
+        assert_eq!(parsed.thinking_level, config.thinking_level);
+        assert!(parsed.fallback_models.is_empty());
+    }
+
+    #[test]
+    fn test_workspace_build_system_prompt() {
+        let mut ws = Workspace::default();
+        ws.agents_md = Some("You are an agent.".to_string());
+        ws.soul_md = Some("Be helpful.".to_string());
+        ws.tools_md = Some("Use tools wisely.".to_string());
+
+        let prompt = ws.build_system_prompt();
+        assert!(prompt.contains("You are an agent."));
+        assert!(prompt.contains("Be helpful."));
+        assert!(prompt.contains("Use tools wisely."));
+    }
+}

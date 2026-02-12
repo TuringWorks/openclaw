@@ -1,11 +1,12 @@
 //! Gateway command.
 
 use clap::Args;
-use openclaw_core::config::BindMode;
+use openclaw_core::config::{self, BindMode};
 use openclaw_gateway::{Gateway, GatewayConfig};
 use openclaw_providers::{
     anthropic::AnthropicProvider, google::GoogleProvider, openai::OpenAIProvider, Provider,
 };
+use std::net::TcpStream;
 use std::sync::Arc;
 use tracing::info;
 
@@ -157,13 +158,36 @@ pub async fn run(args: GatewayArgs) -> anyhow::Result<()> {
         }
 
         GatewayCommand::Stop => {
-            println!("Stopping gateway...");
-            // Would send stop signal to running gateway
+            let cfg = config::Config::load_default().unwrap_or_default();
+            let port = cfg.gateway.port;
+
+            match TcpStream::connect(format!("127.0.0.1:{}", port)) {
+                Ok(_) => {
+                    // Gateway is running but we don't have a shutdown RPC wired yet.
+                    // Print instructions for the user to stop manually.
+                    println!("Gateway is running on port {}.", port);
+                    println!("To stop it, use one of the following:");
+                    println!("  pkill -f openclaw-gateway");
+                    println!("  kill $(lsof -ti :{} -sTCP:LISTEN)", port);
+                }
+                Err(_) => {
+                    println!("Gateway is not running.");
+                }
+            }
         }
 
         GatewayCommand::Status => {
-            println!("Gateway status:");
-            // Would query running gateway
+            let cfg = config::Config::load_default().unwrap_or_default();
+            let port = cfg.gateway.port;
+
+            match TcpStream::connect(format!("127.0.0.1:{}", port)) {
+                Ok(_) => {
+                    println!("Gateway is running on port {}", port);
+                }
+                Err(_) => {
+                    println!("Gateway is not running.");
+                }
+            }
         }
     }
 

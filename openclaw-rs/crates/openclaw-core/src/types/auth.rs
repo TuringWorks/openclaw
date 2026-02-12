@@ -264,3 +264,122 @@ pub fn is_env_var_blocked(name: &str) -> bool {
     }
     BLOCKED_ENV_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_auth_context_admin() {
+        let ctx = AuthContext::admin("test-client");
+        assert_eq!(ctx.client_id, "test-client");
+        assert!(ctx.scopes.contains(&Scope::Admin));
+        assert!(ctx.scopes.contains(&Scope::Read));
+        assert!(ctx.scopes.contains(&Scope::Write));
+        assert!(ctx.scopes.contains(&Scope::Approvals));
+        assert!(ctx.scopes.contains(&Scope::Pairing));
+        assert!(ctx.identity.is_none());
+    }
+
+    #[test]
+    fn test_auth_context_loopback() {
+        let ctx = AuthContext::loopback();
+        assert_eq!(ctx.client_id, "loopback");
+        assert!(ctx.has_scope(Scope::Admin));
+    }
+
+    #[test]
+    fn test_auth_context_has_scope_admin_grants_all() {
+        let ctx = AuthContext::admin("admin-user");
+        // Admin scope implicitly grants access to all scopes.
+        assert!(ctx.has_scope(Scope::Read));
+        assert!(ctx.has_scope(Scope::Write));
+        assert!(ctx.has_scope(Scope::Approvals));
+        assert!(ctx.has_scope(Scope::Pairing));
+    }
+
+    #[test]
+    fn test_auth_context_has_scope_limited() {
+        let ctx = AuthContext {
+            client_id: "limited-user".to_string(),
+            scopes: [Scope::Read].into_iter().collect(),
+            identity: None,
+            authenticated_at: chrono::Utc::now(),
+        };
+        assert!(ctx.has_scope(Scope::Read));
+        assert!(!ctx.has_scope(Scope::Write));
+        assert!(!ctx.has_scope(Scope::Admin));
+    }
+
+    #[test]
+    fn test_auth_context_has_all_scopes() {
+        let ctx = AuthContext::admin("admin");
+        assert!(ctx.has_all_scopes(&[Scope::Read, Scope::Write, Scope::Approvals]));
+
+        let limited = AuthContext {
+            client_id: "user".to_string(),
+            scopes: [Scope::Read].into_iter().collect(),
+            identity: None,
+            authenticated_at: chrono::Utc::now(),
+        };
+        assert!(!limited.has_all_scopes(&[Scope::Read, Scope::Write]));
+    }
+
+    #[test]
+    fn test_scope_all() {
+        let all = Scope::all();
+        assert_eq!(all.len(), 5);
+        assert!(all.contains(&Scope::Admin));
+        assert!(all.contains(&Scope::Read));
+        assert!(all.contains(&Scope::Write));
+        assert!(all.contains(&Scope::Approvals));
+        assert!(all.contains(&Scope::Pairing));
+    }
+
+    #[test]
+    fn test_approval_response_is_approved() {
+        assert!(ApprovalResponse::Approved.is_approved());
+        assert!(!ApprovalResponse::Denied.is_approved());
+        assert!(!ApprovalResponse::Timeout.is_approved());
+    }
+
+    #[test]
+    fn test_approval_response_serde_roundtrip() {
+        let responses = [
+            ApprovalResponse::Approved,
+            ApprovalResponse::Denied,
+            ApprovalResponse::Timeout,
+        ];
+        for resp in &responses {
+            let json = serde_json::to_string(resp).unwrap();
+            let parsed: ApprovalResponse = serde_json::from_str(&json).unwrap();
+            assert_eq!(*resp, parsed);
+        }
+    }
+
+    #[test]
+    fn test_is_env_var_blocked_exact_match() {
+        assert!(is_env_var_blocked("LD_PRELOAD"));
+        assert!(is_env_var_blocked("DYLD_INSERT_LIBRARIES"));
+        assert!(is_env_var_blocked("NODE_OPTIONS"));
+        assert!(is_env_var_blocked("BASH_ENV"));
+        assert!(is_env_var_blocked("SSLKEYLOGFILE"));
+    }
+
+    #[test]
+    fn test_is_env_var_blocked_prefix_match() {
+        // DYLD_ prefix matches any var starting with it.
+        assert!(is_env_var_blocked("DYLD_ANYTHING"));
+        assert!(is_env_var_blocked("DYLD_FRAMEWORK_PATH"));
+        // LD_ prefix matches.
+        assert!(is_env_var_blocked("LD_SOMETHING"));
+    }
+
+    #[test]
+    fn test_is_env_var_not_blocked() {
+        assert!(!is_env_var_blocked("HOME"));
+        assert!(!is_env_var_blocked("PATH"));
+        assert!(!is_env_var_blocked("USER"));
+        assert!(!is_env_var_blocked("MY_CUSTOM_VAR"));
+    }
+}

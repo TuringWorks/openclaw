@@ -615,3 +615,133 @@ pub struct RouteBinding {
 fn default_true() -> bool {
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert!(config.agents.default.is_none());
+        assert!(config.agents.agents.is_empty());
+        assert_eq!(config.gateway.port, 18789);
+        assert_eq!(config.gateway.bind, BindMode::Loopback);
+    }
+
+    #[test]
+    fn test_config_serde_roundtrip() {
+        let config = Config::default();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        let parsed: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.gateway.port, config.gateway.port);
+        assert_eq!(parsed.gateway.bind, config.gateway.bind);
+        assert_eq!(parsed.session.scope, config.session.scope);
+    }
+
+    #[test]
+    fn test_bind_mode_default_is_loopback() {
+        assert_eq!(BindMode::default(), BindMode::Loopback);
+    }
+
+    #[test]
+    fn test_bind_mode_serde_all_variants() {
+        let modes = [BindMode::Loopback, BindMode::Lan, BindMode::Tailnet, BindMode::Auto];
+        for mode in &modes {
+            let json = serde_json::to_string(mode).unwrap();
+            let parsed: BindMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(*mode, parsed);
+        }
+    }
+
+    #[test]
+    fn test_session_scope_default_is_per_sender() {
+        assert_eq!(SessionScope::default(), SessionScope::PerSender);
+    }
+
+    #[test]
+    fn test_session_reset_mode_default_is_daily() {
+        assert_eq!(SessionResetMode::default(), SessionResetMode::Daily);
+    }
+
+    #[test]
+    fn test_memory_provider_default_is_lancedb() {
+        assert_eq!(MemoryProvider::default(), MemoryProvider::Lancedb);
+    }
+
+    #[test]
+    fn test_embeddings_provider_default_is_openai() {
+        assert_eq!(EmbeddingsProvider::default(), EmbeddingsProvider::Openai);
+    }
+
+    #[test]
+    fn test_memory_search_config_default() {
+        let config = MemorySearchConfig::default();
+        assert_eq!(config.limit, 5);
+        assert_eq!(config.top_k, 3);
+    }
+
+    #[test]
+    fn test_log_level_default_is_info() {
+        assert_eq!(LogLevel::default(), LogLevel::Info);
+    }
+
+    #[test]
+    fn test_control_ui_auth_mode_default_is_identity() {
+        assert_eq!(ControlUiAuthMode::default(), ControlUiAuthMode::Identity);
+    }
+
+    #[test]
+    fn test_tailscale_mode_default_is_off() {
+        assert_eq!(TailscaleMode::default(), TailscaleMode::Off);
+    }
+
+    #[test]
+    fn test_cache_type_default_is_prompt() {
+        assert_eq!(CacheType::default(), CacheType::Prompt);
+    }
+
+    #[test]
+    fn test_channels_config_default_all_none() {
+        let channels = ChannelsConfig::default();
+        assert!(channels.telegram.is_none());
+        assert!(channels.discord.is_none());
+        assert!(channels.slack.is_none());
+        assert!(channels.signal.is_none());
+        assert!(channels.whatsapp.is_none());
+        assert!(channels.extensions.is_empty());
+    }
+
+    #[test]
+    fn test_route_binding_serde_roundtrip() {
+        let binding = RouteBinding {
+            agent_id: "my-agent".to_string(),
+            match_channel: Some("telegram".to_string()),
+            match_account: None,
+            match_peer: Some("user123".to_string()),
+            match_guild: None,
+        };
+        let json = serde_json::to_string(&binding).unwrap();
+        let parsed: RouteBinding = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.agent_id, "my-agent");
+        assert_eq!(parsed.match_channel.as_deref(), Some("telegram"));
+        assert!(parsed.match_account.is_none());
+        assert_eq!(parsed.match_peer.as_deref(), Some("user123"));
+    }
+
+    #[test]
+    fn test_gateway_config_default_port() {
+        let config = GatewayConfig::default();
+        assert_eq!(config.port, 18789);
+    }
+
+    #[test]
+    fn test_log_level_serde_all_variants() {
+        let levels = [LogLevel::Trace, LogLevel::Debug, LogLevel::Info, LogLevel::Warn, LogLevel::Error];
+        for level in &levels {
+            let json = serde_json::to_string(level).unwrap();
+            let parsed: LogLevel = serde_json::from_str(&json).unwrap();
+            assert_eq!(*level, parsed);
+        }
+    }
+}

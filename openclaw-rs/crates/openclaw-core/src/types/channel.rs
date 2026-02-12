@@ -278,3 +278,85 @@ pub enum DmScope {
     /// Fully isolated per account + channel + peer.
     PerAccountChannelPeer,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chat_type_default_is_direct() {
+        assert_eq!(ChatType::default(), ChatType::Direct);
+    }
+
+    #[test]
+    fn test_channel_limits_defaults() {
+        let limits = ChannelLimits::default();
+        assert_eq!(limits.text_max_length, 4096);
+        assert_eq!(limits.caption_max_length, 1024);
+        assert!((limits.messages_per_second - 1.0).abs() < f32::EPSILON);
+        assert_eq!(limits.messages_per_minute, 30);
+    }
+
+    #[test]
+    fn test_message_target_new() {
+        let target = MessageTarget::new("chat-123");
+        assert_eq!(target.chat_id, "chat-123");
+        assert!(target.thread_id.is_none());
+    }
+
+    #[test]
+    fn test_message_target_with_thread() {
+        let target = MessageTarget::with_thread("chat-123", "thread-456");
+        assert_eq!(target.chat_id, "chat-123");
+        assert_eq!(target.thread_id.as_deref(), Some("thread-456"));
+    }
+
+    #[test]
+    fn test_dm_policy_default_is_pairing() {
+        assert_eq!(DmPolicy::default(), DmPolicy::Pairing);
+    }
+
+    #[test]
+    fn test_dm_scope_default_is_per_peer() {
+        assert_eq!(DmScope::default(), DmScope::PerPeer);
+    }
+
+    #[test]
+    fn test_health_status_default_is_unknown() {
+        assert_eq!(HealthStatus::default(), HealthStatus::Unknown);
+    }
+
+    #[test]
+    fn test_channel_health_default() {
+        let health = ChannelHealth::default();
+        assert_eq!(health.status, HealthStatus::Unknown);
+        assert!(health.latency_ms.is_none());
+        assert!(health.last_message_at.is_none());
+        assert!(health.error.is_none());
+    }
+
+    #[test]
+    fn test_chat_type_serde_roundtrip() {
+        let types = [ChatType::Direct, ChatType::Group, ChatType::Channel, ChatType::Thread];
+        for ct in &types {
+            let json = serde_json::to_string(ct).unwrap();
+            let parsed: ChatType = serde_json::from_str(&json).unwrap();
+            assert_eq!(*ct, parsed);
+        }
+    }
+
+    #[test]
+    fn test_health_status_serde_roundtrip() {
+        let statuses = [
+            HealthStatus::Healthy,
+            HealthStatus::Degraded,
+            HealthStatus::Unhealthy,
+            HealthStatus::Unknown,
+        ];
+        for s in &statuses {
+            let json = serde_json::to_string(s).unwrap();
+            let parsed: HealthStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(*s, parsed);
+        }
+    }
+}

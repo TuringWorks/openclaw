@@ -260,3 +260,117 @@ pub struct AuditEventFilter {
 fn default_true() -> bool {
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audit_event_creation() {
+        let event = AuditEvent::new(
+            AuditEventType::SessionCreated {
+                session_key: "sess-1".to_string(),
+            },
+            "user-1",
+            AuditOutcome::Success,
+        );
+        assert_eq!(event.actor, "user-1");
+        assert_eq!(event.outcome, AuditOutcome::Success);
+        assert!(event.session_id.is_none());
+        assert!(event.request_id.is_none());
+        assert!(event.details.is_null());
+    }
+
+    #[test]
+    fn test_audit_event_with_session() {
+        let event = AuditEvent::new(
+            AuditEventType::ToolExecuted {
+                tool_name: "read".to_string(),
+                success: true,
+            },
+            "agent",
+            AuditOutcome::Success,
+        )
+        .with_session("session-abc");
+
+        assert_eq!(event.session_id.as_deref(), Some("session-abc"));
+    }
+
+    #[test]
+    fn test_audit_event_with_request() {
+        let event = AuditEvent::new(
+            AuditEventType::ToolExecuted {
+                tool_name: "exec".to_string(),
+                success: false,
+            },
+            "agent",
+            AuditOutcome::Failure,
+        )
+        .with_request("req-xyz");
+
+        assert_eq!(event.request_id.as_deref(), Some("req-xyz"));
+    }
+
+    #[test]
+    fn test_audit_event_with_details() {
+        let details = serde_json::json!({"key": "value"});
+        let event = AuditEvent::new(
+            AuditEventType::ConfigChanged {
+                key: "model".to_string(),
+                old_value: Some("old".to_string()),
+            },
+            "admin",
+            AuditOutcome::Success,
+        )
+        .with_details(details.clone());
+
+        assert_eq!(event.details, details);
+    }
+
+    #[test]
+    fn test_audit_event_type_serde_roundtrip() {
+        let event_type = AuditEventType::ExecCommandRequested {
+            command: "ls -la".to_string(),
+            sandbox: true,
+        };
+        let json = serde_json::to_string(&event_type).unwrap();
+        let parsed: AuditEventType = serde_json::from_str(&json).unwrap();
+        match parsed {
+            AuditEventType::ExecCommandRequested { command, sandbox } => {
+                assert_eq!(command, "ls -la");
+                assert!(sandbox);
+            }
+            _ => panic!("Wrong variant after deserialization"),
+        }
+    }
+
+    #[test]
+    fn test_audit_outcome_serde_roundtrip() {
+        let outcomes = [
+            AuditOutcome::Success,
+            AuditOutcome::Failure,
+            AuditOutcome::Denied,
+            AuditOutcome::Timeout,
+        ];
+        for outcome in &outcomes {
+            let json = serde_json::to_string(outcome).unwrap();
+            let parsed: AuditOutcome = serde_json::from_str(&json).unwrap();
+            assert_eq!(*outcome, parsed);
+        }
+    }
+
+    #[test]
+    fn test_audit_entry_creation() {
+        let event = AuditEvent::new(
+            AuditEventType::AuthSuccess {
+                method: "password".to_string(),
+                identity: Some("admin".to_string()),
+            },
+            "system",
+            AuditOutcome::Success,
+        );
+        let entry = AuditEntry::new(event);
+        assert_eq!(entry.event.actor, "system");
+        // hostname may or may not be available in test environment, just check it exists.
+    }
+}

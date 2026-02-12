@@ -234,3 +234,94 @@ pub const DEFAULT_SUBAGENT_TOOL_DENY: &[&str] = &[
     "cron",              // No scheduling
     "session_status",    // Parent tracks status
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_result_success() {
+        let result = ToolResult::success("tu_1", serde_json::json!({"file": "test.txt"}));
+        assert_eq!(result.tool_use_id, "tu_1");
+        assert!(!result.is_error);
+        assert!(result.duration_ms.is_none());
+    }
+
+    #[test]
+    fn test_tool_result_error() {
+        let result = ToolResult::error("tu_2", "file not found");
+        assert_eq!(result.tool_use_id, "tu_2");
+        assert!(result.is_error);
+        assert_eq!(result.output, Value::String("file not found".to_string()));
+    }
+
+    #[test]
+    fn test_tool_result_with_duration() {
+        let result = ToolResult::success("tu_3", Value::Null)
+            .with_duration(Duration::from_millis(150));
+        assert_eq!(result.duration_ms, Some(150));
+    }
+
+    #[test]
+    fn test_tool_group_default_is_custom() {
+        assert_eq!(ToolGroup::default(), ToolGroup::Custom);
+    }
+
+    #[test]
+    fn test_execution_host_default_is_sandbox() {
+        assert_eq!(ExecutionHost::default(), ExecutionHost::Sandbox);
+    }
+
+    #[test]
+    fn test_groups_get_group() {
+        assert!(groups::get_group("group:memory").is_some());
+        assert!(groups::get_group("group:web").is_some());
+        assert!(groups::get_group("group:fs").is_some());
+        assert!(groups::get_group("group:runtime").is_some());
+        assert!(groups::get_group("group:sessions").is_some());
+        assert!(groups::get_group("group:ui").is_some());
+        assert!(groups::get_group("group:automation").is_some());
+        assert!(groups::get_group("group:messaging").is_some());
+        assert!(groups::get_group("group:nodes").is_some());
+        assert!(groups::get_group("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_groups_fs_contents() {
+        let fs = groups::get_group("group:fs").unwrap();
+        assert!(fs.contains(&"read"));
+        assert!(fs.contains(&"write"));
+        assert!(fs.contains(&"edit"));
+        assert!(fs.contains(&"glob"));
+        assert!(fs.contains(&"grep"));
+    }
+
+    #[test]
+    fn test_default_subagent_tool_deny() {
+        assert!(DEFAULT_SUBAGENT_TOOL_DENY.contains(&"sessions_spawn"));
+        assert!(DEFAULT_SUBAGENT_TOOL_DENY.contains(&"gateway"));
+        assert!(DEFAULT_SUBAGENT_TOOL_DENY.contains(&"memory_search"));
+        assert!(DEFAULT_SUBAGENT_TOOL_DENY.contains(&"cron"));
+        // Regular tools should not be in the deny list.
+        assert!(!DEFAULT_SUBAGENT_TOOL_DENY.contains(&"read"));
+        assert!(!DEFAULT_SUBAGENT_TOOL_DENY.contains(&"exec"));
+    }
+
+    #[test]
+    fn test_tool_group_serde_roundtrip() {
+        let groups_list = [
+            ToolGroup::FileSystem,
+            ToolGroup::System,
+            ToolGroup::Web,
+            ToolGroup::Memory,
+            ToolGroup::Session,
+            ToolGroup::Ui,
+            ToolGroup::Custom,
+        ];
+        for group in &groups_list {
+            let json = serde_json::to_string(group).unwrap();
+            let parsed: ToolGroup = serde_json::from_str(&json).unwrap();
+            assert_eq!(*group, parsed);
+        }
+    }
+}

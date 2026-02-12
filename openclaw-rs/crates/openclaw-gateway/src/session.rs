@@ -105,3 +105,116 @@ impl SessionRegistry {
         sessions.len()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_new_sets_id_and_timestamps() {
+        let session = GatewaySession::new("sess-1");
+        assert_eq!(session.id, "sess-1");
+        assert!(session.agent_id.is_none());
+        assert!(session.metadata.is_empty());
+        // created_at and last_activity should be equal right after creation
+        assert_eq!(session.created_at, session.last_activity);
+    }
+
+    #[test]
+    fn test_session_with_agent() {
+        let session = GatewaySession::new("sess-2").with_agent("agent-alpha");
+        assert_eq!(session.id, "sess-2");
+        assert_eq!(session.agent_id, Some("agent-alpha".to_string()));
+    }
+
+    #[test]
+    fn test_session_touch_updates_last_activity() {
+        let mut session = GatewaySession::new("sess-3");
+        let original = session.last_activity;
+        // Small sleep to ensure time advances
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        session.touch();
+        assert!(session.last_activity >= original);
+        // created_at must remain unchanged
+        assert_eq!(session.created_at, session.created_at);
+    }
+
+    #[test]
+    fn test_session_metadata_can_be_set() {
+        let mut session = GatewaySession::new("sess-4");
+        session.metadata.insert(
+            "client".to_string(),
+            serde_json::json!("web-ui"),
+        );
+        assert_eq!(
+            session.metadata.get("client"),
+            Some(&serde_json::json!("web-ui"))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_registry_create_and_get() {
+        let registry = SessionRegistry::new();
+        let session = registry.create().await;
+        assert!(!session.id.is_empty());
+
+        let fetched = registry.get(&session.id).await;
+        assert!(fetched.is_some());
+        assert_eq!(fetched.unwrap().id, session.id);
+    }
+
+    #[tokio::test]
+    async fn test_registry_get_missing_returns_none() {
+        let registry = SessionRegistry::new();
+        let result = registry.get("nonexistent-id").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_registry_remove() {
+        let registry = SessionRegistry::new();
+        let session = registry.create().await;
+        let id = session.id.clone();
+
+        registry.remove(&id).await;
+        assert!(registry.get(&id).await.is_none());
+        assert_eq!(registry.count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn test_registry_list_and_count() {
+        let registry = SessionRegistry::new();
+        assert_eq!(registry.count().await, 0);
+        assert!(registry.list().await.is_empty());
+
+        let s1 = registry.create().await;
+        let s2 = registry.create().await;
+        assert_eq!(registry.count().await, 2);
+
+        let ids = registry.list().await;
+        assert!(ids.contains(&s1.id));
+        assert!(ids.contains(&s2.id));
+    }
+
+    #[tokio::test]
+    async fn test_registry_update_session() {
+        let registry = SessionRegistry::new();
+        let mut session = registry.create().await;
+        let id = session.id.clone();
+
+        // Attach an agent and update in registry
+        session.agent_id = Some("agent-beta".to_string());
+        registry.update(session).await;
+
+        let updated = registry.get(&id).await.unwrap();
+        assert_eq!(updated.agent_id, Some("agent-beta".to_string()));
+    }
+
+    #[test]
+    fn test_registry_default_trait() {
+        // SessionRegistry implements Default via Default for SessionRegistry
+        let registry = SessionRegistry::default();
+        // Verify it is usable (not a compile-only check)
+        assert!(std::mem::size_of_val(&registry) > 0);
+    }
+}

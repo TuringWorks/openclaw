@@ -12,6 +12,7 @@ members = [
     "crates/openclaw-providers",
     "crates/openclaw-secrets",
     "examples/hello-plugin",
+    "tests/integration",
 ]
 
 [workspace.package]

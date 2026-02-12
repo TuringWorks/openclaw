@@ -1,0 +1,19 @@
+[package]
+name = "openclaw-integration-tests"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# This is a test-only crate; it has no library or binary targets.
+# Each file in tests/ is a separate integration test binary.
+[lib]
+name = "openclaw_integration_tests"
+path = "lib.rs"
+
+[dependencies]
+openclaw-core = { path = "../../crates/openclaw-core" }
+openclaw-cli = { path = "../../crates/openclaw-cli" }
+openclaw-gateway = { path = "../../crates/openclaw-gateway" }
+serde_json = "1.0"
+tempfile = "3.8"
+tokio = { version = "1.35", features = ["macros", "rt-multi-thread"] }

@@ -46,12 +46,18 @@ termimad = "0.30"
 crossterm = "0.28"
 ctrlc = "3.4"
 
+# HTTP client
+reqwest = { version = "0.11", features = ["json"] }
+
 # Async streams
 futures = "0.3"
 async-stream = "0.3"
 
 # Config
 directories = "5.0"
+
+[dev-dependencies]
+tempfile = "3"
 
 [features]
 default = []

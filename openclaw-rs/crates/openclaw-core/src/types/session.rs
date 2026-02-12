@@ -331,3 +331,177 @@ pub struct SessionMetadata {
     #[serde(default)]
     pub labels: HashMap<String, String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_new() {
+        let key = SessionKey::new("test-session");
+        let agent = AgentId::new("bot");
+        let session = Session::new(key.clone(), agent.clone());
+
+        assert_eq!(session.key, key);
+        assert_eq!(session.agent_id, agent);
+        assert!(session.messages.is_empty());
+        assert!(session.cost.is_none());
+        assert!(session.model.is_none());
+        assert!(session.thinking_level.is_none());
+        assert_eq!(session.type_mode, TypeMode::Typing);
+    }
+
+    #[test]
+    fn test_session_add_message() {
+        let key = SessionKey::new("test-session");
+        let agent = AgentId::new("bot");
+        let mut session = Session::new(key, agent);
+        let original_time = session.last_message_at;
+
+        // Small sleep not needed; just check that adding a message works.
+        let msg = Message::user("Hello");
+        session.add_message(msg);
+
+        assert_eq!(session.messages.len(), 1);
+        // last_message_at should be updated (>= original).
+        assert!(session.last_message_at >= original_time);
+    }
+
+    #[test]
+    fn test_message_user() {
+        let msg = Message::user("Hello");
+        assert_eq!(msg.role, Role::User);
+        assert!(msg.name.is_none());
+        assert!(msg.tool_use_id.is_none());
+    }
+
+    #[test]
+    fn test_message_assistant() {
+        let msg = Message::assistant("Hi there");
+        assert_eq!(msg.role, Role::Assistant);
+    }
+
+    #[test]
+    fn test_message_system() {
+        let msg = Message::system("You are helpful.");
+        assert_eq!(msg.role, Role::System);
+    }
+
+    #[test]
+    fn test_message_content_as_text() {
+        let text_content = MessageContent::Text("hello".to_string());
+        assert_eq!(text_content.as_text(), Some("hello"));
+
+        // Single Text block should also return Some.
+        let block_content = MessageContent::Blocks(vec![ContentBlock::Text {
+            text: "world".to_string(),
+        }]);
+        assert_eq!(block_content.as_text(), Some("world"));
+
+        // Multiple blocks should return None.
+        let multi = MessageContent::Blocks(vec![
+            ContentBlock::Text { text: "a".to_string() },
+            ContentBlock::Text { text: "b".to_string() },
+        ]);
+        assert!(multi.as_text().is_none());
+
+        // Non-text block should return None.
+        let thinking = MessageContent::Blocks(vec![ContentBlock::Thinking {
+            thinking: "hmm".to_string(),
+        }]);
+        assert!(thinking.as_text().is_none());
+    }
+
+    #[test]
+    fn test_message_content_to_text() {
+        let text = MessageContent::Text("hello".to_string());
+        assert_eq!(text.to_text(), "hello");
+
+        // Blocks: only Text blocks are joined.
+        let blocks = MessageContent::Blocks(vec![
+            ContentBlock::Text { text: "foo".to_string() },
+            ContentBlock::Thinking { thinking: "ignored".to_string() },
+            ContentBlock::Text { text: "bar".to_string() },
+        ]);
+        assert_eq!(blocks.to_text(), "foobar");
+    }
+
+    #[test]
+    fn test_token_usage_total() {
+        let usage = TokenUsage {
+            input: 100,
+            output: 200,
+            cache_creation: 50,
+            cache_read: 30,
+        };
+        assert_eq!(usage.total(), 380);
+    }
+
+    #[test]
+    fn test_token_usage_add() {
+        let mut a = TokenUsage {
+            input: 10,
+            output: 20,
+            cache_creation: 0,
+            cache_read: 0,
+        };
+        let b = TokenUsage {
+            input: 5,
+            output: 15,
+            cache_creation: 3,
+            cache_read: 2,
+        };
+        a.add(&b);
+        assert_eq!(a.input, 15);
+        assert_eq!(a.output, 35);
+        assert_eq!(a.cache_creation, 3);
+        assert_eq!(a.cache_read, 2);
+    }
+
+    #[test]
+    fn test_cost_usage_default() {
+        let cost = CostUsage::default();
+        assert_eq!(cost.input_usd, 0.0);
+        assert_eq!(cost.output_usd, 0.0);
+        assert_eq!(cost.total_usd, 0.0);
+    }
+
+    #[test]
+    fn test_type_mode_serde_roundtrip() {
+        let modes = [TypeMode::Typing, TypeMode::Never, TypeMode::Thinking, TypeMode::Message];
+        for mode in &modes {
+            let json = serde_json::to_string(mode).unwrap();
+            let parsed: TypeMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(*mode, parsed);
+        }
+    }
+
+    #[test]
+    fn test_session_metadata_default() {
+        let meta = SessionMetadata::default();
+        assert!(meta.channel.is_none());
+        assert!(meta.account_id.is_none());
+        assert!(meta.peer_id.is_none());
+        assert!(meta.labels.is_empty());
+    }
+
+    #[test]
+    fn test_message_tool_result() {
+        let msg = Message::tool_result("tu_123", "result data", false);
+        assert_eq!(msg.role, Role::Tool);
+        match &msg.content {
+            MessageContent::Blocks(blocks) => {
+                assert_eq!(blocks.len(), 1);
+                match &blocks[0] {
+                    ContentBlock::ToolResult { tool_use_id, content, is_error } => {
+                        assert_eq!(tool_use_id, "tu_123");
+                        assert_eq!(content, "result data");
+                        assert!(!is_error);
+                    }
+                    _ => panic!("Expected ToolResult block"),
+                }
+            }
+            _ => panic!("Expected Blocks content"),
+        }
+    }
+}

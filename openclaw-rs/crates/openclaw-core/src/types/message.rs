@@ -304,3 +304,110 @@ pub struct DeliveryResult {
     #[serde(default)]
     pub metadata: Value,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_inbound_message_default() {
+        let msg = InboundMessage::default();
+        assert_eq!(msg.id.as_str(), "");
+        assert!(msg.channel.is_empty());
+        assert!(msg.account_id.is_empty());
+        assert!(msg.text.is_empty());
+        assert!(msg.media.is_empty());
+        assert!(msg.quote.is_none());
+        assert!(msg.thread.is_none());
+        assert_eq!(msg.metadata, Value::Null);
+    }
+
+    #[test]
+    fn test_media_type_default_is_document() {
+        assert_eq!(MediaType::default(), MediaType::Document);
+    }
+
+    #[test]
+    fn test_media_type_serde_roundtrip() {
+        let types = [
+            MediaType::Image,
+            MediaType::Audio,
+            MediaType::Video,
+            MediaType::Voice,
+            MediaType::Document,
+            MediaType::Sticker,
+        ];
+        for media_type in &types {
+            let json = serde_json::to_string(media_type).unwrap();
+            let parsed: MediaType = serde_json::from_str(&json).unwrap();
+            assert_eq!(*media_type, parsed);
+        }
+    }
+
+    #[test]
+    fn test_media_type_serde_values() {
+        // Verify the rename_all = "lowercase" serialization.
+        assert_eq!(serde_json::to_string(&MediaType::Image).unwrap(), "\"image\"");
+        assert_eq!(serde_json::to_string(&MediaType::Voice).unwrap(), "\"voice\"");
+    }
+
+    #[test]
+    fn test_parse_mode_serde_roundtrip() {
+        let modes = [ParseMode::Markdown, ParseMode::Html, ParseMode::Plain];
+        for mode in &modes {
+            let json = serde_json::to_string(mode).unwrap();
+            let parsed: ParseMode = serde_json::from_str(&json).unwrap();
+            assert_eq!(*mode, parsed);
+        }
+    }
+
+    #[test]
+    fn test_outbound_message_default() {
+        let msg = OutboundMessage::default();
+        assert!(msg.text.is_empty());
+        assert!(msg.media.is_empty());
+        assert!(msg.mentions.is_empty());
+        assert!(msg.reply_to.is_none());
+        assert!(!msg.options.disable_preview);
+        assert!(!msg.options.silent);
+    }
+
+    #[test]
+    fn test_send_options_default() {
+        let opts = SendOptions::default();
+        assert!(!opts.disable_preview);
+        assert!(!opts.silent);
+        assert!(opts.parse_mode.is_none());
+        assert!(opts.keyboard.is_none());
+    }
+
+    #[test]
+    fn test_sender_info_default() {
+        let sender = SenderInfo::default();
+        assert!(sender.id.is_empty());
+        assert!(sender.username.is_none());
+        assert!(sender.display_name.is_none());
+        assert!(sender.phone_number.is_none());
+        assert!(!sender.is_bot);
+    }
+
+    #[test]
+    fn test_chat_info_default() {
+        let chat = ChatInfo::default();
+        assert!(chat.id.is_empty());
+        assert_eq!(chat.chat_type, super::super::ChatType::Direct);
+        assert!(chat.title.is_none());
+        assert!(chat.guild_id.is_none());
+    }
+
+    #[test]
+    fn test_media_source_url_serde() {
+        let source = MediaSource::Url("https://example.com/img.png".to_string());
+        let json = serde_json::to_string(&source).unwrap();
+        let parsed: MediaSource = serde_json::from_str(&json).unwrap();
+        match parsed {
+            MediaSource::Url(url) => assert_eq!(url, "https://example.com/img.png"),
+            _ => panic!("Expected MediaSource::Url"),
+        }
+    }
+}
