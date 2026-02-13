@@ -15,6 +15,7 @@ High-performance Rust implementation of the OpenClaw AI agent gateway.
 | `openclaw-cli` | Command-line interface |
 | `openclaw-plugin-sdk` | Plugin development kit for extensions |
 | `openclaw-providers` | Model provider integrations (Anthropic, OpenAI, Google) |
+| `openclaw-secrets` | Encrypted secrets and credential management |
 
 ## Building
 
@@ -85,8 +86,20 @@ cargo build -p openclaw-channels --features slack
 # Build with WebSocket support
 cargo build -p openclaw-channels --features web
 
+# Build with Signal support
+cargo build -p openclaw-channels --features signal
+
+# Build with iMessage support (macOS only)
+cargo build -p openclaw-channels --features imessage
+
+# Build with WhatsApp support
+cargo build -p openclaw-channels --features whatsapp
+
+# Build with LINE support
+cargo build -p openclaw-channels --features line
+
 # Build with all channels
-cargo build -p openclaw-channels --features "telegram,discord,slack,web"
+cargo build -p openclaw-channels --features "telegram,discord,slack,web,signal,imessage,whatsapp,line"
 ```
 
 ## Architecture
@@ -121,25 +134,43 @@ cargo build -p openclaw-channels --features "telegram,discord,slack,web"
 │  ├────────────┤  │  │  ├──────────┤   │  │  └────────────┘  │
 │  │ Streaming  │  │  │  │ Slack    │   │  │                  │
 │  └────────────┘  │  │  ├──────────┤   │  └──────────────────┘
-│                  │  │  │ Web      │   │
-└──────────────────┘  │  └──────────┘   │
-          │           │                  │
-          ▼           └──────────────────┘
-┌──────────────────┐
-│ openclaw-sandbox │
-│ (Cmd execution)  │
-└──────────────────┘
+│                  │  │  │ Signal   │   │
+│                  │  │  ├──────────┤   │
+│                  │  │  │ WhatsApp │   │
+│                  │  │  ├──────────┤   │
+│                  │  │  │ Web +more│   │
+│                  │  │  └──────────┘   │
+└──────────────────┘  └──────────────────┘
           │
           ▼
-┌──────────────────┐
-│  openclaw-core   │
-│ (Types & config) │
-└──────────────────┘
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ openclaw-sandbox │  │openclaw-providers│  │ openclaw-secrets │
+│ (Cmd execution)  │  │ (AI models)      │  │ (Credentials)    │
+└──────────────────┘  └──────────────────┘  └──────────────────┘
+          │                    │                    │
+          ▼                    ▼                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       openclaw-core                              │
+│                    (Types & configuration)                       │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+## Implementation Status
+
+All 4 specification phases are complete:
+
+| Phase | Focus | Status |
+|-------|-------|--------|
+| Phase 1 | Core Infrastructure (providers, gateway, tools) | Complete |
+| Phase 2 | Channels (Telegram, Discord, Slack, Signal, WhatsApp, iMessage, LINE, Web) | Complete |
+| Phase 3 | Advanced Features (Plugin SDK, browser automation, memory/embeddings) | Complete |
+| Phase 4 | Platform & Polish (CLI, config validation, comprehensive testing) | Complete |
+
+**Key metrics:** 167 source files, 725 tests passing, 101 agent tools, 46 gateway RPC methods, 11 workspace crates.
 
 ## Agent Tools
 
-The agent includes 99 built-in tools:
+The agent includes 101 built-in tools:
 
 ### File System
 - `read` - Read file contents
@@ -210,6 +241,8 @@ The agent includes 99 built-in tools:
 ### Memory
 - `memory_search` - Search stored memories
 - `memory_get` - Retrieve specific memories
+- `memory_store` - Store information in memory
+- `memory_index` - Index and organize memory entries
 
 ### Automation
 - `cron` - Schedule recurring tasks
@@ -311,19 +344,22 @@ The agent includes 99 built-in tools:
 
 ## Gateway RPC Methods
 
-The gateway exposes 54+ RPC methods for:
+The gateway exposes 46+ RPC methods for:
 
-- Health monitoring (`gateway.health`, `gateway.presence`)
-- Agent management (`agent.run`, `agent.run_stream`, `agent.abort`)
-- Chat interface (`chat.send`, `chat.abort`)
-- Session management (`sessions.list`, `sessions.get`, `sessions.history`)
-- Model management (`models.list`, `models.get`, `models.usage`)
-- Configuration (`config.get`, `config.set`, `config.allowlist`)
-- Channel management (`channels.list`, `channels.status`, `channels.send`)
-- Device pairing (`device.list`, `device.pair`, `device.unpair`)
-- Cron jobs (`cron.list`, `cron.create`, `cron.update`, `cron.delete`)
-- Skill management (`skills.list`, `skills.run`)
-- System operations (`system.info`, `system.logs`, `system.restart`)
+- Health monitoring (`health`, `status`)
+- Chat interface (`chat`, `chat.history`, `chat.abort`)
+- Agent management (`agent`, `agent.stream`)
+- Session management (`sessions.list`, `sessions.resolve`, `sessions.patch`, `sessions.delete`)
+- Model management (`models.list`)
+- Configuration (`config.get`, `config.set`, `config.patch`, `config.schema`)
+- Channel messaging (`send`, `send.poll`)
+- Device pairing (`device.pair.list`, `device.pair.approve`, `device.pair.reject`, `device.token.rotate`, `device.token.revoke`)
+- Node management (`node.list`, `node.describe`, `node.pair.request`, `node.pair.approve`, `node.pair.reject`, `node.unpair`, `node.rename`, `node.invoke`)
+- Cron scheduling (`cron.list`, `cron.status`, `cron.add`, `cron.update`, `cron.remove`, `cron.run`, `cron.runs`, `wake`)
+- Execution approvals (`exec.approvals.get`, `exec.approvals.set`, `exec.approval.request`, `exec.approval.resolve`)
+- Skill management (`skills.status`, `skills.bins`, `skills.install`, `skills.update`)
+- System operations (`system-presence`, `system-event`, `last-heartbeat`, `set-heartbeats`, `logs.tail`)
+- Setup wizard (`wizard.start`, `wizard.next`, `wizard.cancel`, `wizard.status`)
 
 ## Model Providers
 

@@ -59,9 +59,10 @@ pub struct StateVersion {
 
 ## Method Categories
 
+46 registered RPC methods across 15 handler categories:
+
 ### 1. Chat Methods
 - `chat` - Send a chat message and get response
-- `chat.stream` - Streaming chat response
 - `chat.history` - Get conversation history
 - `chat.abort` - Abort ongoing chat
 
@@ -147,7 +148,7 @@ pub struct StateVersion {
 
 ### 14. Send Methods
 - `send` - Send message
-- `send` (poll) - Send poll
+- `send.poll` - Send poll
 
 ### 15. Browser Methods
 - `browser.request` - Browser HTTP request

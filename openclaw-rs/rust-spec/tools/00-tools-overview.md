@@ -2,6 +2,8 @@
 
 ## Tool Categories
 
+101 built-in tools organized into 37 categories:
+
 ### 1. File System Tools
 - `read` - Read file contents
 - `write` - Write file contents
@@ -46,6 +48,134 @@
 
 ### 10. Browser Tools
 - `browser` - Browser automation
+
+### 11. File Operations Tools
+- `file_copy` - Copy files to a new location
+- `file_move` - Move or rename files
+- `file_stat` - Get file/directory information
+- `file_delete` - Delete files or directories
+
+### 12. Archive Tools
+- `zip` - Create/extract zip archives
+- `tar` - Create/extract tar archives
+
+### 13. Checksum Tools
+- `file_checksum` - Compute file hash (MD5, SHA1, SHA256, SHA512)
+- `file_verify` - Verify file matches expected hash
+
+### 14. Template Tools
+- `template` - Substitute variables in template strings
+- `format` - Format values (JSON, numbers, bytes, durations)
+
+### 15. Process Tools
+- `process_list` - List running processes
+- `process_info` - Get current process information
+
+### 16. Utility Tools
+- `sleep` - Wait for a specified duration
+- `temp_file` - Create a temporary file
+- `temp_dir` - Create a temporary directory
+- `echo` - Echo a value back
+
+### 17. Environment Tools
+- `env_get` - Get environment variable value
+- `env_list` - List environment variables
+- `env_check` - Check if environment variables exist
+
+### 18. HTTP Tools
+- `http_request` - Make HTTP requests to APIs
+- `url_parse` - Parse URL into components
+- `url_build` - Build URL with query parameters
+
+### 19. Network Tools
+- `dns_lookup` - DNS record lookup
+- `port_check` - Check TCP port connectivity
+- `http_ping` - Check HTTP/HTTPS endpoint reachability
+- `net_info` - Get network interface information
+
+### 20. Notebook Tools
+- `notebook_edit` - Edit Jupyter notebook cells
+
+### 21. Code Intelligence Tools
+- `lsp` - Language Server Protocol (go-to-definition, find-references, hover)
+
+### 22. Task Management Tools
+- `task_create` - Create tasks to track work
+- `task_list` - List all tasks
+- `task_update` - Update task status
+- `task_get` - Get task details
+
+### 23. Interactive Tools
+- `ask_user` - Ask user questions with multiple choice options
+- `confirm` - Request user confirmation for actions
+
+### 24. Planning Tools
+- `enter_plan_mode` - Enter planning mode for implementation design
+- `exit_plan_mode` - Exit planning mode and submit plan
+
+### 25. Skills Tools
+- `skill` - Invoke a registered skill
+- `skill_list` - List available skills
+
+### 26. Diagnostics Tools
+- `system_info` - Get system information
+- `health_check` - Check agent health and status
+- `diagnostic` - Run diagnostics to troubleshoot issues
+
+### 27. Context Management Tools
+- `context_add` - Add information to working context
+- `context_get` - Retrieve entries from working context
+- `context_clear` - Clear the working context
+
+### 28. Diff & Patch Tools
+- `diff` - Generate diffs between text or files
+- `patch` - Preview and apply search/replace changes
+
+### 29. Git Tools
+- `git_status` - Get repository status
+- `git_log` - View commit history
+- `git_diff` - View changes
+- `git_branch` - List and manage branches
+
+### 30. JSON/YAML Tools
+- `json_query` - Query JSON data using path expressions
+- `json_transform` - Transform JSON (pick, omit, rename, flatten)
+- `yaml` - Parse and convert between YAML and JSON
+
+### 31. Encoding & Hashing Tools
+- `base64` - Base64 encode/decode
+- `hex` - Hexadecimal encode/decode
+- `hash` - Compute hashes (MD5, SHA1, SHA256, SHA512)
+- `url_encode` - URL encode/decode
+
+### 32. Time & Date Tools
+- `now` - Get current date and time
+- `date_parse` - Parse and format date strings
+- `date_calc` - Date calculations (add, subtract, diff)
+
+### 33. String Manipulation Tools
+- `case` - Convert case (upper, lower, camel, snake, kebab)
+- `split_join` - Split and join strings
+- `replace` - Text replacement with regex support
+- `trim_pad` - Trim whitespace or pad strings
+
+### 34. Math & Random Tools
+- `calc` - Mathematical calculations
+- `random` - Generate random numbers, strings, or pick items
+- `uuid` - Generate UUIDs
+
+### 35. Validation Tools
+- `validate` - Validate formats (email, URL, JSON, UUID, IP, etc.)
+- `is_empty` - Check if value is empty, null, or blank
+
+### 36. Comparison & Assertion Tools
+- `compare` - Compare two values
+- `assert` - Assert a condition is true
+- `match` - Match text against regex patterns
+- `version_compare` - Compare semantic version strings
+
+### 37. Canvas Tools
+- `canvas` - Visual canvas operations
 
 ## Core Tool Trait
 

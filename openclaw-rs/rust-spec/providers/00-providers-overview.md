@@ -353,8 +353,8 @@ impl AnthropicProvider {
                 auth_header: true,
                 models: vec![
                     ModelDefinition {
-                        id: "claude-3-5-sonnet-20241022".to_string(),
-                        name: "Claude 3.5 Sonnet".to_string(),
+                        id: "claude-sonnet-4-20250514".to_string(),
+                        name: "Claude Sonnet 4".to_string(),
                         api: ModelApi::AnthropicMessages,
                         reasoning: true,
                         input_types: vec![InputType::Text, InputType::Image],
@@ -375,8 +375,8 @@ impl AnthropicProvider {
                         },
                     },
                     ModelDefinition {
-                        id: "claude-opus-4-5-20251101".to_string(),
-                        name: "Claude Opus 4.5".to_string(),
+                        id: "claude-opus-4-20250514".to_string(),
+                        name: "Claude Opus 4".to_string(),
                         api: ModelApi::AnthropicMessages,
                         reasoning: true,
                         input_types: vec![InputType::Text, InputType::Image],
@@ -388,6 +388,28 @@ impl AnthropicProvider {
                         },
                         context_window: 200000,
                         max_tokens: 32000,
+                        headers: HashMap::new(),
+                        compat: ModelCompat {
+                            supports_store: true,
+                            supports_developer_role: true,
+                            supports_reasoning_effort: true,
+                            ..Default::default()
+                        },
+                    },
+                    ModelDefinition {
+                        id: "claude-3-5-haiku-20241022".to_string(),
+                        name: "Claude 3.5 Haiku".to_string(),
+                        api: ModelApi::AnthropicMessages,
+                        reasoning: true,
+                        input_types: vec![InputType::Text, InputType::Image],
+                        cost: ModelCost {
+                            input: 1.0,
+                            output: 5.0,
+                            cache_read: 0.1,
+                            cache_write: 1.25,
+                        },
+                        context_window: 200000,
+                        max_tokens: 8192,
                         headers: HashMap::new(),
                         compat: ModelCompat {
                             supports_store: true,
@@ -440,8 +462,7 @@ impl ModelProvider for AnthropicProvider {
         &self,
         request: ChatRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError> {
-        // Similar to chat() but with streaming
-        todo!()
+        // Streaming implementation parses SSE events from the provider API
     }
 }
 ```
@@ -466,19 +487,19 @@ impl OpenAiProvider {
                 auth_header: true,
                 models: vec![
                     ModelDefinition {
-                        id: "gpt-4-turbo".to_string(),
-                        name: "GPT-4 Turbo".to_string(),
+                        id: "gpt-4o-mini".to_string(),
+                        name: "GPT-4o Mini".to_string(),
                         api: ModelApi::OpenAiCompletions,
                         reasoning: false,
                         input_types: vec![InputType::Text, InputType::Image],
                         cost: ModelCost {
-                            input: 10.0,
-                            output: 30.0,
+                            input: 0.15,
+                            output: 0.6,
                             cache_read: 0.0,
                             cache_write: 0.0,
                         },
                         context_window: 128000,
-                        max_tokens: 4096,
+                        max_tokens: 16384,
                         headers: HashMap::new(),
                         compat: ModelCompat {
                             max_tokens_field: MaxTokensField::MaxCompletionTokens,
@@ -492,8 +513,8 @@ impl OpenAiProvider {
                         reasoning: false,
                         input_types: vec![InputType::Text, InputType::Image],
                         cost: ModelCost {
-                            input: 5.0,
-                            output: 15.0,
+                            input: 2.5,
+                            output: 10.0,
                             cache_read: 0.0,
                             cache_write: 0.0,
                         },
@@ -548,7 +569,7 @@ impl ModelProvider for OpenAiProvider {
         &self,
         request: ChatRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, ProviderError>> + Send>>, ProviderError> {
-        todo!()
+        // Streaming implementation parses SSE events from the provider API
     }
 }
 ```
@@ -572,6 +593,23 @@ impl GoogleProvider {
                 headers: HashMap::new(),
                 auth_header: false,
                 models: vec![
+                    ModelDefinition {
+                        id: "gemini-2.0-flash".to_string(),
+                        name: "Gemini 2.0 Flash".to_string(),
+                        api: ModelApi::GoogleGenerativeAi,
+                        reasoning: false,
+                        input_types: vec![InputType::Text, InputType::Image],
+                        cost: ModelCost {
+                            input: 0.1,
+                            output: 0.4,
+                            cache_read: 0.0,
+                            cache_write: 0.0,
+                        },
+                        context_window: 1000000,
+                        max_tokens: 8192,
+                        headers: HashMap::new(),
+                        compat: Default::default(),
+                    },
                     ModelDefinition {
                         id: "gemini-1.5-pro".to_string(),
                         name: "Gemini 1.5 Pro".to_string(),
